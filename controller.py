@@ -151,6 +151,8 @@ class StaticFileController(BaseController):
 
 class ViewController(BaseController):
     def __call__(self):
+        if not session:
+            return redirect(url_for('admin_view'))
         if not session["username"]:
             session["username"] = ""
         username = session["username"]
