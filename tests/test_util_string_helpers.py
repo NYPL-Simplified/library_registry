@@ -102,7 +102,7 @@ class TestRandomstring(object):
             x = m(size)
 
             # The strings are Unicode strings, not bytestrings
-            assert isinstance(x, unicode)
+            assert isinstance(x, str)
 
             # The strings are entirely composed of lowercase hex digits.
             eq_(None, re.compile("[^a-f0-9]").search(x))

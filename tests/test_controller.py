@@ -1681,13 +1681,13 @@ class TestLibraryRegistryController(ControllerTest):
 class TestValidationController(ControllerTest):
 
     def test_html_response(self):
-        """Test the generation of a simple HTML-based HTTP response."""
+        # Test the generation of a simple HTML-based HTTP response.
         controller = ValidationController(self.library_registry)
         response = controller.html_response(999, "a message")
         eq_(999, response.status_code)
         eq_("text/html", response.headers['Content-Type'])
         eq_(controller.MESSAGE_TEMPLATE % dict(message="a message"),
-            response.data)
+            response.data.decode("utf8"))
 
     def test_validate(self):
         class Mock(ValidationController):

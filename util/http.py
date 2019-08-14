@@ -69,7 +69,7 @@ class RemoteIntegrationException(IntegrationException):
         super(RemoteIntegrationException, self).__init__(message, debug_message)
 
     def __str__(self):
-        base_message = str(super(RemoteIntegrationException, self))
+        base_message = super(RemoteIntegrationException, self).__str__()
         return self.internal_message % (self.url, base_message)
 
     def document_detail(self, debug=True):
