@@ -10,7 +10,7 @@ from nose.tools import (
 from problem_details import (
     LIBRARY_NOT_FOUND
 )
-from test_controller import ControllerTest
+from .test_controller import ControllerTest
 from testing import DatabaseTest
 
 class TestAppHelpers(ControllerTest):

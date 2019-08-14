@@ -291,8 +291,8 @@ class TestLinkExtractor(object):
         eq_("gold", parsed.color_scheme)
         eq_({"eng": 100, "spa": 20}, parsed.collection_size)
         eq_("a public key", parsed.public_key)
-        eq_({u'rel': 'alternate', u'href': u'http://ansonialibrary.org',
-             u'type': u'text/html'},
+        eq_({'rel': 'alternate', 'href': 'http://ansonialibrary.org',
+             'type': 'text/html'},
             parsed.website)
         eq_(True, parsed.online_registration)
         eq_({"rel": "start", "href": "http://opds.example.com/", "type": "application/atom+xml;profile=opds-catalog"}, parsed.root)
@@ -614,7 +614,7 @@ class TestUpdateAudiences(DatabaseTest):
         # But you can't specify some other random object.
         value = dict(k="v")
         problem = self.update(value)
-        eq_(u"'audience' must be a list: %r" % value, problem.detail)
+        eq_("'audience' must be a list: %r" % value, problem.detail)
 
     def test_unrecognized_audiences_become_other(self):
         # If you specify an audience that we don't recognize, it becomes
@@ -657,7 +657,7 @@ class TestUpdateCollectionSize(DatabaseTest):
 
         # Two CollectionSummaries have been created, for the English
         # collection and the (empty) Japanese collection.
-        eq_([(u'eng', 100), (u'jpn', 0)],
+        eq_([('eng', 100), ('jpn', 0)],
             sorted([(x.language, x.size) for x in self.library.collections]))
 
         # Update the library with new data.

@@ -8,7 +8,7 @@ import json
 import base64
 import random
 from smtplib import SMTPException
-from urllib import unquote
+from urllib.parse import unquote
 
 from contextlib import contextmanager
 from controller import (
@@ -239,7 +239,7 @@ class TestLibraryRegistryController(ControllerTest):
         # Getting rid of the "uuid" key before populating flattened, because its value is just a string, not a subdictionary.
         # The UUID information is still being checked elsewhere.
         del actual["uuid"]
-        for subdictionary in actual.values():
+        for subdictionary in list(actual.values()):
             flattened.update(subdictionary)
 
         for k in flattened:
@@ -1305,10 +1305,7 @@ class TestLibraryRegistryController(ControllerTest):
             auth_document = self._auth_document()
 
             # Remove the crucial link.
-            auth_document['links'] = filter(
-            lambda x: x['rel'] != rel or not x['href'].startswith("mailto:"),
-                auth_document['links']
-            )
+            auth_document['links'] = [x for x in auth_document['links'] if x['rel'] != rel or not x['href'].startswith("mailto:")]
 
             def _request_fails():
                 self.http_client.queue_response(
@@ -1593,7 +1590,7 @@ class TestLibraryRegistryController(ControllerTest):
             ("contact", "mailto:me@library.org")
         ])
         form_args_with_reset = ImmutableMultiDict(
-            form_args_no_reset.items() + [
+            list(form_args_no_reset.items()) + [
                 ("reset_shared_secret", "y")
             ]
         )

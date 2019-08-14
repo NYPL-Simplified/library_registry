@@ -1,4 +1,4 @@
-from StringIO import StringIO
+from io import StringIO
 from nose.tools import (
     eq_,
     set_trace,
@@ -127,5 +127,5 @@ class TestGeometryLoader(DatabaseTest):
         # represent 'Alabama'.
         distance_func = func.ST_Distance_Sphere(montgomery.geometry, alabama.geometry)
         [[distance]] = self._db.query().add_columns(distance_func).all()
-        print distance
+        print(distance)
         eq_(276, int(distance/1000))
