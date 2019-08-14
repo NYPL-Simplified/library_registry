@@ -41,7 +41,7 @@ class TestParseCoverage(DatabaseTest):
         expected_places = expected_places or []
         expected_unknown = expected_unknown or empty
         expected_ambiguous = expected_ambiguous or empty
-        eq_(sorted(expected_places), sorted(place_objs))
+        eq_(expected_places, place_objs)
         eq_(expected_unknown, unknown)
         eq_(expected_ambiguous, ambiguous)
 
@@ -595,7 +595,7 @@ class TestUpdateAudiences(DatabaseTest):
         doc = AuthenticationDocument.from_dict(self._db, doc_dict)
         problem = doc.update_audiences(self.library)
         eq_(None, problem)
-        eq_(audiences, [x.name for x in self.library.audiences])
+        eq_(set(audiences), set([x.name for x in self.library.audiences]))
 
         # Set them again to different but partially overlapping values.
         audiences = [

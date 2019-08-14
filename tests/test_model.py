@@ -423,7 +423,7 @@ class TestLibrary(DatabaseTest):
             raise Error("Expected exception not raised.")
         except ValueError as e:
             eq_('Short name cannot contain the pipe character.',
-                e.message)
+                str(e))
 
     def test_for_short_name(self):
         eq_(None, Library.for_short_name(self._db, 'ABCD'))
