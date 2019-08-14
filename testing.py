@@ -426,7 +426,7 @@ class DummyHTTPClient(object):
         response.url = url
 
         code = response.status_code
-        series = "%sxx" % (code / 100)
+        series = "%sxx" % (code // 100)
 
         if allowed_response_codes and (
             code not in allowed_response_codes and series not in allowed_response_codes

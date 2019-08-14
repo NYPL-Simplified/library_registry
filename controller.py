@@ -322,6 +322,8 @@ class LibraryRegistryController(BaseController):
         # Manually validate an email address, without the admin having to click on a confirmation link
         uuid = flask.request.form.get("uuid")
         library = self.library_for_request(uuid)
+        if isinstance(library, ProblemDetail):
+            return library
         hyperlink = Library.get_hyperlink(library, Hyperlink.INTEGRATION_CONTACT_REL)
         if not hyperlink or not hyperlink.resource or isinstance(hyperlink, ProblemDetail):
             return INVALID_CONTACT_URI.detailed(
