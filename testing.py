@@ -12,7 +12,7 @@ from sqlalchemy.orm.exc import (
     NoResultFound,
     MultipleResultsFound,
 )
-from StringIO import StringIO
+from io import StringIO
 
 from config import Configuration
 from log import LogConfiguration
@@ -114,7 +114,7 @@ class DatabaseTest(object):
 
     @property
     def _str(self):
-        return unicode(self._id)
+        return str(self._id)
 
     @property
     def _url(self):
@@ -182,11 +182,11 @@ class DatabaseTest(object):
                 integration.libraries.extend(libraries)
                 self._db.add(integration)
 
-        for attr, value in kwargs.items():
+        for attr, value in list(kwargs.items()):
             setattr(integration, attr, value)
 
         settings = settings or dict()
-        for key, value in settings.items():
+        for key, value in list(settings.items()):
             integration.set_setting(key, value)
 
         return integration
@@ -199,7 +199,7 @@ class DatabaseTest(object):
             )
             self.latitude_counter += 0.1
             self.longitude_counter += 0.1
-        elif isinstance(geometry, basestring):
+        elif isinstance(geometry, str):
             # Treat it as GeoJSON.
             geometry = GeometryUtility.from_geojson(geometry)
         external_id = external_id or self._str
@@ -409,7 +409,7 @@ class DummyHTTPClient(object):
         if media_type:
             headers["Content-Type"] = media_type
         if other_headers:
-            for k, v in other_headers.items():
+            for k, v in list(other_headers.items()):
                 headers[k.lower()] = v
         self.responses.insert(
             0, DummyHTTPResponse(response_code, headers, content, links, url)
@@ -448,7 +448,7 @@ class MockRequestsResponse(object):
         content = self.content
         # The queued content might be a JSON string or it might
         # just be the object you'd get from loading a JSON string.
-        if isinstance(content, basestring):
+        if isinstance(content, str):
             content = json.loads(self.content)
         return content
 
@@ -488,7 +488,7 @@ class MockPlace(object):
             raise MultipleResultsFound()
         if place is None:
             raise NoResultFound()
-        print "%s->%s" % (name, place)
+        print(("%s->%s" % (name, place)))
         return place
 
     def lookup_inside(self, name):
