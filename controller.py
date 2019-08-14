@@ -13,7 +13,6 @@ from smtplib import SMTPException
 import json
 from Crypto.PublicKey import RSA
 from Crypto.Cipher import PKCS1_OAEP
-import base64
 import os
 from urllib.parse import unquote
 
@@ -51,6 +50,10 @@ from util.http import (
     HTTP,
 )
 from util.problem_detail import ProblemDetail
+from util.string_helpers import (
+    base64,
+    random_string,
+)
 from problem_details import *
 
 OPENSEARCH_MEDIA_TYPE = "application/opensearchdescription+xml"
@@ -593,9 +596,11 @@ class LibraryRegistryController(BaseController):
                 (library.shared_secret is None) or reset_shared_secret
             )
             if generate_secret:
-                library.shared_secret = os.urandom(24).encode('hex')
+                library.shared_secret = random_string(24)
 
-            encrypted_secret = encryptor.encrypt(str(library.shared_secret))
+            encrypted_secret = encryptor.encrypt(
+                library.shared_secret.encode("utf8")
+            )
 
             catalog["metadata"]["short_name"] = library.short_name
             catalog["metadata"]["shared_secret"] = base64.b64encode(encrypted_secret)

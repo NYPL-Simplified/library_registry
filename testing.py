@@ -12,7 +12,7 @@ from sqlalchemy.orm.exc import (
     NoResultFound,
     MultipleResultsFound,
 )
-from io import StringIO
+from io import BytesIO
 
 from config import Configuration
 from log import LogConfiguration
@@ -393,7 +393,7 @@ class DummyHTTPResponse(object):
 
     @property
     def raw(self):
-        return StringIO(self.content)
+        return BytesIO(self.content)
 
 class DummyHTTPClient(object):
 
@@ -448,7 +448,7 @@ class MockRequestsResponse(object):
         content = self.content
         # The queued content might be a JSON string or it might
         # just be the object you'd get from loading a JSON string.
-        if isinstance(content, str):
+        if isinstance(content, (bytes, str)):
             content = json.loads(self.content)
         return content
 
