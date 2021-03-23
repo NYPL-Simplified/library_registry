@@ -18,7 +18,7 @@ ipaddress==1.0.22
 itsdangerous==0.24
 Jinja2==2.10
 loggly-python-handler==1.0.0
-lxml==4.1.1
+lxml==4.6.3
 MarkupSafe==1.0
 maxminddb==1.4.1
 maxminddb-geolite2==2018.703
