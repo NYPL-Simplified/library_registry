@@ -42,12 +42,16 @@ FROM python:3.9.2-alpine3.13 AS builder
 
 EXPOSE 80
 
-##### Install NGINX #####
+##### Install NGINX, uWSGI, and Supervisor #####
 # This is a simplified version of the offical Nginx Dockerfile for Alpine 3.13:
 # https://github.com/nginxinc/docker-nginx/blob/dcaaf66e4464037b1a887541f39acf8182233ab8/mainline/alpine/Dockerfile
+#
+# The uWSGI installation from source is not from an external Dockerfile.
 ENV NGINX_VERSION 1.19.8
 ENV NJS_VERSION   0.5.2
 ENV PKG_RELEASE   1
+ENV UWSGI_VERSION 2.0.19.1
+ENV SUPERVISOR_VERSION 4.2.2
 
 RUN set -x \
     && addgroup -g 101 -S nginx \
@@ -88,14 +92,25 @@ RUN set -x \
     && apk del .gettext \
     && mv /tmp/envsubst /usr/local/bin/ \
     && apk add --no-cache tzdata \
-    && apk add --no-cache curl ca-certificates
+    && apk add --no-cache curl ca-certificates \
+    && apk add --no-cache --virtual .uwsgi-build-deps \
+       build-base \
+       linux-headers \
+    && wget -O /tmp/uwsgi-${UWSGI_VERSION}.tar.gz https://projects.unbit.it/downloads/uwsgi-${UWSGI_VERSION}.tar.gz \
+    && mkdir -p /usr/local/src \
+    && tar -xzf /tmp/uwsgi-${UWSGI_VERSION}.tar.gz --directory /usr/local/src \
+    && cd /usr/local/src/uwsgi-${UWSGI_VERSION} \
+    && python ./uwsgiconfig.py --build \
+    && ./uwsgi --build-plugin "plugins/python python3" \
+    && ln -s /usr/local/src/uwsgi-${UWSGI_VERSION}/uwsgi /usr/bin/uwsgi \
+    && pip install supervisor \
+    && pip install pipenv \
+    && apk del .uwsgi-build-deps
 
-##### Set up uWSGI, Nginx, and Supervisor #####
+##### Set up uWSGI, Nginx, and Supervisor configurations #####
 
-RUN apk add --no-cache uwsgi-python3 supervisor \
- && pip install pipenv
-
-# This causes pipenv not to spam the build output with extra lines.
+# This causes pipenv not to spam the build output with extra lines when 
+# running `pipenv install`:
 #   https://github.com/pypa/pipenv/issues/4052#issuecomment-588480867
 ENV CI 1
 
