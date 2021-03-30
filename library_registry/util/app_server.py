@@ -77,7 +77,7 @@ class ErrorHandler():
 
         if isinstance(exception, DatabaseError):
             # The database session may have become tainted. For now the simplest thing to do is
-            # to kill the entire process and let uwsgi restart it.
+            # to kill the entire process and let gunicorn restart it.
             err_msg = f"Database error: {exception} Treating as fatal to avoid holding on to a tainted session!"
             logging.error(err_msg, exc_info=exception)
             shutdown = flask.request.environ.get('werkzeug.server.shutdown')

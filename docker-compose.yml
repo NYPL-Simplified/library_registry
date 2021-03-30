@@ -17,13 +17,14 @@ services:
     ports:
       - "80:80"
     environment:
-      - SIMPLIFIED_TEST_DATABASE='postgresql://simplified_test:simplified_test@local_db:5432/simplified_registry_test'
-      - SIMPLIFIED_PRODUCTION_DATABASE='postgresql://simplified:simplified@local_db:5432/simplified_registry_dev'
-      - FLASK_ENV='development'
+      - SIMPLIFIED_TEST_DATABASE=postgresql://simplified_test:simplified_test@local_db:5432/simplified_registry_test
+      - SIMPLIFIED_PRODUCTION_DATABASE=postgresql://simplified:simplified@local_db:5432/simplified_registry_dev
+      - FLASK_ENV=development
     volumes:
       - type: bind
         source: .
         target: /libreg_app
+        read_only: true
 
 volumes:
   local_db_data:

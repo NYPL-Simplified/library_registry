@@ -12,7 +12,6 @@ psycopg2
 maxminddb-geolite2
 requests
 sqlalchemy
-uwsgi
 Flask-Babel
 pycryptodome
 pillow

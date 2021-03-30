@@ -2,4 +2,4 @@
 set -e
 
 # Start up Supervisor, with Nginx and uWSGI
-exec /usr/local/bin/supervisord
+exec /usr/local/bin/supervisord -c /etc/supervisord.conf

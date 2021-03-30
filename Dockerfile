@@ -25,7 +25,7 @@ EXPOSE 5432
 
 
 ##############################################################################
-# Intermediate target: builder
+# Intermediate stage: builder
 #
 # This stage builds out the common pieces of the dev and prod images, and isn't
 # meant to be used as a build target. Though feel free--I'm a docstring, not a
@@ -33,24 +33,23 @@ EXPOSE 5432
 #
 #  * Installs Nginx from source, mirroring the process used in the official
 #    Nginx Docker images.
-#  * Installs uWSGI and Supervisor from the Alpine system packages.
-#  * Installs pipenv from PyPI, via the system pip from the base Python image
-#  * Copies in the config files for uWSGI, Nginx, and Supervisor
+#  * Via the system pip, installs:
+#      * gunicorn
+#      * pipenv
+#      * supervisor
+#  * Copies in the config files for Gunicorn, Nginx, and Supervisor
 #  * Sets the container entrypoint, which is a script that starts Supervisor
 
 FROM python:3.9.2-alpine3.13 AS builder
 
 EXPOSE 80
 
-##### Install NGINX, uWSGI, and Supervisor #####
+##### Install NGINX, Gunicorn, and Supervisor #####
 # This is a simplified version of the offical Nginx Dockerfile for Alpine 3.13:
 # https://github.com/nginxinc/docker-nginx/blob/dcaaf66e4464037b1a887541f39acf8182233ab8/mainline/alpine/Dockerfile
-#
-# The uWSGI installation from source is not from an external Dockerfile.
 ENV NGINX_VERSION 1.19.8
 ENV NJS_VERSION   0.5.2
 ENV PKG_RELEASE   1
-ENV UWSGI_VERSION 2.0.19.1
 ENV SUPERVISOR_VERSION 4.2.2
 
 RUN set -x \
@@ -93,30 +92,26 @@ RUN set -x \
     && mv /tmp/envsubst /usr/local/bin/ \
     && apk add --no-cache tzdata \
     && apk add --no-cache curl ca-certificates \
-    && apk add --no-cache --virtual .uwsgi-build-deps \
-       build-base \
-       linux-headers \
-    && wget -O /tmp/uwsgi-${UWSGI_VERSION}.tar.gz https://projects.unbit.it/downloads/uwsgi-${UWSGI_VERSION}.tar.gz \
-    && mkdir -p /usr/local/src \
-    && tar -xzf /tmp/uwsgi-${UWSGI_VERSION}.tar.gz --directory /usr/local/src \
-    && cd /usr/local/src/uwsgi-${UWSGI_VERSION} \
-    && python ./uwsgiconfig.py --build \
-    && ./uwsgi --build-plugin "plugins/python python3" \
-    && ln -s /usr/local/src/uwsgi-${UWSGI_VERSION}/uwsgi /usr/bin/uwsgi \
-    && pip install supervisor \
-    && pip install pipenv \
-    && apk del .uwsgi-build-deps
-
-##### Set up uWSGI, Nginx, and Supervisor configurations #####
+    && pip install \
+           supervisor \
+           pipenv \
+           gunicorn \
+    && mkdir /etc/gunicorn \
+    && chown nginx:nginx /etc/gunicorn \
+    && mkdir /var/log/supervisord \
+    && chown nginx:nginx /var/log/supervisord
+    
+##### Set up Gunicorn, Nginx, and Supervisor configurations #####
 
 # This causes pipenv not to spam the build output with extra lines when 
 # running `pipenv install`:
 #   https://github.com/pypa/pipenv/issues/4052#issuecomment-588480867
 ENV CI 1
 
-COPY ./docker/uwsgi.ini /etc/uwsgi/libreg_uwsgi.ini
+COPY ./docker/gunicorn.conf.py /etc/gunicorn/gunicorn.conf.py
 COPY ./docker/nginx.conf /etc/nginx/nginx.conf
 COPY ./docker/supervisord-alpine.ini /etc/supervisord.conf
+COPY ./docker/runinvenv /usr/local/bin/runinvenv
 COPY ./docker/docker-entrypoint.sh /docker-entrypoint.sh
 
 ENTRYPOINT ["sh", "/docker-entrypoint.sh"]
@@ -171,6 +166,11 @@ WORKDIR /libreg_app
 #   https://github.com/pypa/pipenv/issues/1226#issuecomment-598487793
 #
 ENV WORKON_HOME /libreg_venv
+ENV FLASK_ENV development
+
+# Copy the Pipfile to the temporary app directory, so the install's virtualenv 
+# path is still correct when the bind mount is applied at run time.
+COPY ./Pipfile ./
 
 # Install the system dependencies and the Python dependencies. Note that if 
 # you want to be able to install new Python dependencies on the fly from
@@ -187,8 +187,7 @@ RUN set -ex \
 		expat-dev \
 		findutils \
 		gcc \
-		gdbm-dev \
-        jpeg-dev \
+		gdbm-dev \        
 		libc-dev \
 		libffi-dev \
 		libnsl-dev \
@@ -207,17 +206,16 @@ RUN set -ex \
 		tk-dev \
 		util-linux-dev \
 		xz-dev \
-		zlib-dev 
-
-# Copy the Pipfiles to the temporary app directory, so the install's virtualenv 
-# path is still correct when the bind mount is applied at run time.
-COPY ./Pipfile ./
-COPY ./Pipfile.lock ./
-
-RUN mkdir ${WORKON_HOME} \
+		zlib-dev \
+ # We need to leave these installed for psycopg2 and PIL
+ && apk add --no-cache \
+    libpq \
+    jpeg-dev \
+    libxcb-dev \
+ && mkdir ${WORKON_HOME} \
  && cd /libreg_app \
- && pipenv install --dev --skip-lock
-	#&& apk del --no-network .build-deps
+ && pipenv install --dev --skip-lock \
+ && apk del --no-network .build-deps
 
 ##############################################################################
 
