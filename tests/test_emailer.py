@@ -85,9 +85,8 @@ class MockEmailer(Emailer):
 
 class TestEmailer(DatabaseTest):
 
-    def _integration(self):
+    def config_test_integration(self, integration):
         """Configure a complete sitewide email integration."""
-        integration = self._external_integration("my protocol")
         integration.goal = Emailer.GOAL
         integration.username = "smtp_username"
         integration.password = "smtp_password"
@@ -97,30 +96,25 @@ class TestEmailer(DatabaseTest):
         integration.setting(Emailer.FROM_ADDRESS).value = 'me@registry'
         return integration
 
-    def test__sitewide_integration(self):
-        """Test the ability to find a sitewide integration for sending out
-        email.
-        """
-        m = Emailer._sitewide_integration
-        # If there's no integration with goal=Emailer.GOAL,
-        # _sitewide_integration raises an exception.
+    def test__sitewide_integration(self, db_session, create_test_integration):
+        """Test the ability to find a sitewide integration for sending out email"""
+        # If there's no integration with goal=Emailer.GOAL, _sitewide_integration raises an exception.
         with pytest.raises(CannotLoadConfiguration):
-            m(self._db)
+            Emailer._sitewide_integration(db_session)
 
         # If there's only one, _sitewide_integration finds it.
-        integration = self._integration()
-        assert m(self._db) == integration
+        integration_a = self.config_test_integration(create_test_integration(db_session, "my protocol"))
+        assert Emailer._sitewide_integration(db_session) == integration_a
 
-        # If there are multiple integrations with goal=Emailer.GOAL, no
-        # sitewide configuration can be determined.
-        self._integration()
+        # If there are multiple integrations with goal=Emailer.GOAL, no sitewide configuration can be determined.
+        self.config_test_integration(create_test_integration(db_session, "my protocol"))
         with pytest.raises(CannotLoadConfiguration):
-            m(self._db)
+            Emailer._sitewide_integration(db_session)
 
-    def test_from_sitewide_integration(self):
+    def test_from_sitewide_integration(self, db_session, create_test_integration):
         """Test the ability to load an Emailer from a sitewide integration."""
-        integration = self._integration()
-        emailer = Emailer.from_sitewide_integration(self._db)
+        integration = self.config_test_integration(create_test_integration(db_session, "my protocol"))
+        emailer = Emailer.from_sitewide_integration(db_session)
 
         # The Emailer's configuration is based on the sitewide integration.
         assert emailer.smtp_username == "smtp_username"
@@ -140,7 +134,7 @@ class TestEmailer(DatabaseTest):
             integration.setting(email_type + "_subject").value = ("subject %s" % email_type)
             integration.setting(email_type + "_body").value = ("body %s" % email_type)
 
-        emailer = Emailer.from_sitewide_integration(self._db)
+        emailer = Emailer.from_sitewide_integration(db_session)
 
         for email_type in Emailer.EMAIL_TYPES:
             template = emailer.templates[email_type]
@@ -149,59 +143,53 @@ class TestEmailer(DatabaseTest):
 
     def test_constructor(self):
         """Verify the exceptions raised when required constructor arguments are missing"""
-        args = dict(
-            [(x, None) for x in (
-                'smtp_username', 'smtp_password', 'smtp_host', 'smtp_port',
-                'from_name', 'from_address',
-            )]
-        )
+        keynames = ['smtp_username', 'smtp_password', 'smtp_host', 'smtp_port', 'from_name', 'from_address']
+        args = dict.fromkeys(keynames, None)
         args['templates'] = {}
 
-        m = Emailer
-
         with pytest.raises(CannotLoadConfiguration) as e:
-            m(**args)
+            Emailer(**args)
         assert "No SMTP username specified" in str(e.value)
 
         args['smtp_username'] = 'user'
         with pytest.raises(CannotLoadConfiguration) as e:
-            m(**args)
+            Emailer(**args)
         assert "No SMTP password specified" in str(e.value)
 
         args['smtp_password'] = 'password'
         with pytest.raises(CannotLoadConfiguration) as e:
-            m(**args)
+            Emailer(**args)
         assert "No SMTP host specified" in str(e.value)
 
         args['smtp_host'] = 'host'
         with pytest.raises(CannotLoadConfiguration) as e:
-            m(**args)
+            Emailer(**args)
         assert "No SMTP port specified" in str(e.value)
 
         args['smtp_port'] = 'port'
         with pytest.raises(CannotLoadConfiguration) as e:
-            m(**args)
+            Emailer(**args)
         assert "No From: name specified" in str(e.value)
 
         args['from_name'] = 'Email Sender'
         with pytest.raises(CannotLoadConfiguration) as e:
-            m(**args)
+            Emailer(**args)
         assert "No From: address specified" in str(e.value)
 
         args['from_address'] = 'from@library.org'
-        m(**args)     # all parts specified, should work now
+        Emailer(**args)     # all parts specified, should work now
 
         # If one of the templates can't be used, it doesn't work.
         args['templates']['key'] = EmailTemplate("%(nope)s", "email body")
 
         with pytest.raises(CannotLoadConfiguration) as e:
-            m(**args)
+            Emailer(**args)
         assert r"Template '%(nope)s'/'email body' contains unrecognized key: KeyError('nope')" in str(e.value)
 
-    def test_templates(self):
+    def test_templates(self, db_session, create_test_integration):
         """Test the emails generated by the default templates."""
-        self._integration()
-        emailer = Emailer.from_sitewide_integration(self._db)
+        self.config_test_integration(create_test_integration(db_session, "my protocol"))
+        emailer = Emailer.from_sitewide_integration(db_session)
 
         # Start with arguments common to both email templates.
         args = {
@@ -270,13 +258,13 @@ class TestEmailer(DatabaseTest):
         ]:
             assert phrase in body2
 
-    def test_send(self):
+    def test_send(self, db_session, create_test_integration):
         """Validate our ability to construct and send email."""
-        integration = self._integration()
+        integration = self.config_test_integration(create_test_integration(db_session, "my protocol"))
         integration.setting("email1_subject").value = "subject %(arg)s"
         integration.setting("email1_body").value = "body %(arg)s"
 
-        emailer = MockEmailer.from_sitewide_integration(self._db)
+        emailer = MockEmailer.from_sitewide_integration(db_session)
         emailer.templates['email1'] = EmailTemplate(
             "subject %(arg)s", "Hello, %(to_address)s, this is %(from_address)s."
         )
@@ -285,8 +273,7 @@ class TestEmailer(DatabaseTest):
         # Send an email using the template we just created.
         emailer.send("email1", "you@library", mock_smtp, arg="Value")
 
-        # The template was filled out and passed into our mocked-up
-        # _send_email implementation.
+        # The template was filled out and passed into our mocked-up _send_email implementation.
         (to, body, smtp) = emailer.emails.pop()
         assert to == "you@library"
 
@@ -300,10 +287,10 @@ class TestEmailer(DatabaseTest):
             assert phrase in body
         assert smtp == mock_smtp
 
-    def test__send_email(self):
+    def test__send_email(self, db_session, create_test_integration):
         """Verify that send_email calls certain methods on smtplib.SMTP."""
-        self._integration()
-        emailer = Emailer.from_sitewide_integration(self._db)
+        self.config_test_integration(create_test_integration(db_session, "my protocol"))
+        emailer = Emailer.from_sitewide_integration(db_session)
         mock = MockSMTP()
         emailer._send_email("you@library", "email body", mock)
 
