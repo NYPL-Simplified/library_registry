@@ -24,6 +24,8 @@ pytest = "*"
 pytest-datadir = "*"
 bcrypt = "*"
 gunicorn = "*"
+nose = "*"
+pathlib = "*"
 
 [dev-packages]
 future = "*"

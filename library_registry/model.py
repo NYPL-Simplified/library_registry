@@ -1914,13 +1914,55 @@ class ConfigurationSetting(Base):
       with both a Library and an ExternalIntegration.
     """
     __tablename__ = 'configurationsettings'
-    __table_args__ = tuple(UniqueConstraint('external_integration_id', 'library_id', 'key'))
 
     id = Column(Integer, primary_key=True)
     external_integration_id = Column(Integer, ForeignKey('externalintegrations.id'), index=True)
     library_id = Column(Integer, ForeignKey('libraries.id'), index=True)
-    key = Column(Unicode, index=True)
+    key = Column(Unicode)
     _value = Column(Unicode, name="value")
+
+    __table_args__ = (
+        # Unique indexes to prevent the creation of redundant
+        # configuration settings.
+
+        # If both external_integration_id and library_id are null,
+        # then the key--the name of a sitewide setting--must be unique.
+        Index(
+            "ix_configurationsettings_key",
+            key,
+            unique=True,
+            postgresql_where=and_(
+                external_integration_id==None, library_id==None
+            )
+        ),
+
+        # If external_integration_id is null but library_id is not,
+        # then (library_id, key) must be unique.
+        Index(
+            "ix_configurationsettings_library_id_key",
+            library_id, key,
+            unique=True,
+            postgresql_where=(external_integration_id==None)
+        ),
+
+        # If library_id is null but external_integration_id is not,
+        # then (external_integration_id, key) must be unique.
+        Index(
+            "ix_configurationsettings_external_integration_id_key",
+            external_integration_id, key,
+            unique=True,
+            postgresql_where=library_id==None
+        ),
+
+        # If both external_integration_id and library_id have values,
+        # then (external_integration_id, library_id, key) must be
+        # unique.
+        Index(
+            "ix_configurationsettings_external_integration_id_library_id_key",
+            external_integration_id, library_id, key,
+            unique=True,
+        ),
+    )
 
     def __repr__(self):
         return f"<ConfigurationSetting: key={self.key}, ID={self.id}>"

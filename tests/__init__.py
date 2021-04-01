@@ -111,10 +111,6 @@ class DatabaseTest():
         self.longitude_counter = -90
 
     def teardown(self):
-        secret_keys = self._db.query(ConfigurationSetting).filter(
-            ConfigurationSetting.key == Configuration.SECRET_KEY
-        )
-        [self._db.delete(secret_key) for secret_key in secret_keys]
         # Close the session.
         self._db.close()
 
@@ -122,6 +118,17 @@ class DatabaseTest():
         # test, whether in the session that was just closed or some
         # other session.
         self.transaction.rollback()
+
+    @pytest.fixture()
+    def secret_keys(self):
+        """If your test creates secret keys, use this fixture to
+        delete them once the test is done.
+        """
+        yield
+        secret_keys = self._db.query(ConfigurationSetting).filter(
+            ConfigurationSetting.key == Configuration.SECRET_KEY
+        )
+        [self._db.delete(secret_key) for secret_key in secret_keys]
 
     @property
     def _id(self):

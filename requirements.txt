@@ -16,3 +16,5 @@ Flask-Babel
 pycryptodome
 pillow
 uszipcode
+# pathlib is used in tests
+pathlib

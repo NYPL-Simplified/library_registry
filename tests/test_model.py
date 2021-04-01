@@ -1404,6 +1404,69 @@ class TestConfigurationSetting(DatabaseTest):
         assert 'nonsecret_setting' in without_secrets
 
 
+class TestUniquenessConstraints(DatabaseTest):
+
+    def test_duplicate_sitewide_setting(self):
+        # You can't create two sitewide settings with the same key.
+        c1 = ConfigurationSetting(key="key", value="value1")
+        self._db.add(c1)
+        self._db.flush()
+        c2 = ConfigurationSetting(key="key", value="value2")
+        self._db.add(c2)
+        with pytest.raises(IntegrityError) as exc:
+            self._db.flush()
+
+    def test_duplicate_library_setting(self):
+        # A library can't have two settings with the same key.
+        library = self._library()
+        c1 = ConfigurationSetting(
+            key="key", value="value1", library_id=library.id
+        )
+        self._db.add(c1)
+        self._db.flush()
+        c2 = ConfigurationSetting(
+            key="key", value="value2", library_id=library.id
+        )
+        self._db.add(c2)
+        with pytest.raises(IntegrityError) as exc:
+            self._db.flush()
+
+    def test_duplicate_integration_setting(self):
+        # An external integration can't have two settings with the
+        # same key.
+        integration = self._external_integration(self._str)
+        c1 = ConfigurationSetting(
+            key="key", value="value1", external_integration=integration
+        )
+        self._db.add(c1)
+        self._db.flush()
+        c2 = ConfigurationSetting(
+            key="key", value="value1", external_integration=integration
+        )
+        self._db.add(c2)
+        with pytest.raises(IntegrityError) as exc:
+            self._db.flush()
+
+    def test_duplicate_library_integration_setting(self):
+        # A library can't configure an external integration two
+        # different ways for the same key.
+        library = self._library()
+        integration = self._external_integration(self._str)
+        c1 = ConfigurationSetting(
+            key="key", value="value1", library_id=library.id,
+            external_integration=integration
+        )
+        self._db.add(c1)
+        self._db.flush()
+        c2 = ConfigurationSetting(
+            key="key", value="value1", library_id=library.id,
+            external_integration=integration
+        )
+        self._db.add(c2)
+        with pytest.raises(IntegrityError) as exc:
+            self._db.flush()
+
+
 class TestHyperlink(DatabaseTest):
 
     def test_notify(self):
