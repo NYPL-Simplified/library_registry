@@ -101,6 +101,51 @@ def vendor_id(vendor_id_node_value):
 
 
 @pytest.fixture(scope="session")
+def create_test_integration():
+    """Returns a factory function for creating ExternalIntegrations in tests"""
+    def _create_test_integration(db_session, protocol, goal=None, settings=None,
+                                 libraries=None, **kwargs):
+        integration = None
+        if not libraries:
+            (integration, _) = get_one_or_create(db_session, ExternalIntegration, protocol=protocol, goal=goal)
+        else:
+            for lib in libraries:
+                # Look for an existing integration on one of the given libraries
+                integration = ExternalIntegration.lookup(db_session, protocol, goal, library=lib)
+                if integration:
+                    break
+
+            # Otherwise create a new one
+            if not integration:
+                integration = ExternalIntegration(protocol=protocol, goal=goal)
+                integration.libraries.extend(libraries)
+                db_session.add(integration)
+
+        for attr, value in kwargs.items():
+            setattr(integration, attr, value)
+
+        settings = settings or {}
+        for k, v in settings.items():
+            integration.set_setting(k, v)
+
+        return integration
+
+    return _create_test_integration
+
+
+@pytest.fixture(scope="session")
+def loggly_integration(persistent_db_session, create_test_integration):
+    integration = create_test_integration(
+        persistent_db_session,
+        protocol=ExternalIntegration.LOGGLY,
+        goal=ExternalIntegration.LOGGING_GOAL
+    )
+    integration.url = "http://example.com/%s"
+    integration.password = "a_token"
+    return integration
+
+
+@pytest.fixture(scope="session")
 def create_test_place():
     """Returns a factory function for creating places for tests"""
     def _create_test_place(db_session, external_id=None, external_name=None, place_type=None,

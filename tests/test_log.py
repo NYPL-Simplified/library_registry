@@ -6,67 +6,54 @@ from library_registry.log import (JSONFormatter, LogConfiguration,
                                   LogglyHandler, StringFormatter)
 from library_registry.model import ExternalIntegration
 
-from . import DatabaseTest
 
+class TestLogConfiguration:
 
-class TestLogConfiguration(DatabaseTest):
-
-    def loggly_integration(self):
-        """Create an ExternalIntegration for a Loggly account."""
-        integration = self._external_integration(
-            protocol=ExternalIntegration.LOGGLY,
-            goal=ExternalIntegration.LOGGING_GOAL
-        )
-        integration.url = "http://example.com/%s/"
-        integration.password = "a_token"
-        return integration
-
-    def test_from_configuration(self):
+    def test_from_configuration(self, db_session, create_test_integration):
         cls = LogConfiguration
         m = cls.from_configuration
 
-        # When logging is configured on initial startup, with no
-        # database connection, these are the defaults.
-        internal_log_level, database_log_level, [handler] = m(None, testing=False)
+        # When logging is configured on startup with no db connection, these are the defaults.
+        (internal_log_level, database_log_level, [handler]) = m(None, testing=False)
         assert internal_log_level == cls.INFO
         assert database_log_level == cls.WARN
         assert isinstance(handler.formatter, JSONFormatter)
 
-        # The same defaults hold when there is a database connection
-        # but nothing is actually configured.
-        internal_log_level, database_log_level, [handler] = m(self._db, testing=False)
+        # Same defaults hold when there is a db connection but nothing is actually configured.
+        (internal_log_level, database_log_level, [handler]) = m(db_session, testing=False)
         assert internal_log_level == cls.INFO
         assert database_log_level == cls.WARN
         assert isinstance(handler.formatter, JSONFormatter)
 
         # Let's set up a Loggly integration and change the defaults.
-        self.loggly_integration()
-        internal = self._external_integration(
-            protocol=ExternalIntegration.INTERNAL_LOGGING,
-            goal=ExternalIntegration.LOGGING_GOAL
+        loggly = create_test_integration(
+            db_session, protocol=ExternalIntegration.LOGGLY, goal=ExternalIntegration.LOGGING_GOAL
+        )
+        loggly.url = "http://example.com/%s/"
+        loggly.password = "a_token"
+
+        internal = create_test_integration(
+            db_session, protocol=ExternalIntegration.INTERNAL_LOGGING, goal=ExternalIntegration.LOGGING_GOAL
         )
         internal.setting(cls.LOG_LEVEL).value = cls.ERROR
         internal.setting(cls.LOG_FORMAT).value = cls.TEXT_LOG_FORMAT
         internal.setting(cls.DATABASE_LOG_LEVEL).value = cls.DEBUG
         template = "%(filename)s:%(message)s"
         internal.setting(cls.LOG_MESSAGE_TEMPLATE).value = template
-        internal_log_level, database_log_level, handlers = m(
-            self._db, testing=False
-        )
+        (internal_log_level, database_log_level, handlers) = m(db_session, testing=False)
+
         assert internal_log_level == cls.ERROR
         assert database_log_level == cls.DEBUG
         [loggly_handler] = [x for x in handlers if isinstance(x, LogglyHandler)]
         assert loggly_handler.url == "http://example.com/a_token/"
 
-        [stream_handler] = [x for x in handlers
-                            if isinstance(x, logging.StreamHandler)]
+        [stream_handler] = [x for x in handlers if isinstance(x, logging.StreamHandler)]
         assert isinstance(stream_handler.formatter, StringFormatter)
         assert template == stream_handler.formatter._fmt
 
-        # If testing=True, then the database configuration is ignored,
-        # and the log setup is one that's appropriate for display
-        # alongside unit test output.
-        internal_log_level, database_log_level, [handler] = m(self._db, testing=True)
+        # If testing=True, then the database configuration is ignored, and the log setup is
+        # one that's appropriate for display alongside unit test output.
+        internal_log_level, database_log_level, [handler] = m(db_session, testing=True)
         assert internal_log_level == cls.DEBUG
         assert database_log_level == cls.WARN
         assert handler.formatter._fmt == cls.DEFAULT_MESSAGE_TEMPLATE
@@ -106,10 +93,14 @@ class TestLogConfiguration(DatabaseTest):
         LogConfiguration.set_formatter(loggly_handler, None, None)
         assert isinstance(loggly_handler.formatter, JSONFormatter)
 
-    def test_loggly_handler(self):
+    def test_loggly_handler(self, db_session, create_test_integration):
         """Turn an appropriate ExternalIntegration into a LogglyHandler."""
 
-        integration = self.loggly_integration()
+        integration = create_test_integration(
+            db_session, protocol=ExternalIntegration.LOGGLY, goal=ExternalIntegration.LOGGING_GOAL
+        )
+        integration.url = "http://example.com/%s/"
+        integration.password = "a_token"
         handler = LogConfiguration.loggly_handler(integration)
         assert isinstance(handler, LogglyHandler)
         assert handler.url == "http://example.com/a_token/"
@@ -117,7 +108,7 @@ class TestLogConfiguration(DatabaseTest):
         # Remove the loggly handler's .url, and the default URL will be used.
         integration.url = None
         handler = LogConfiguration.loggly_handler(integration)
-        expected = LogConfiguration.DEFAULT_LOGGLY_URL % dict(token="a_token")
+        expected = LogConfiguration.DEFAULT_LOGGLY_URL % {"token": "a_token"}
         assert handler.url == expected
 
     def test_interpolate_loggly_url(self):
