@@ -134,18 +134,6 @@ def create_test_integration():
 
 
 @pytest.fixture(scope="session")
-def loggly_integration(persistent_db_session, create_test_integration):
-    integration = create_test_integration(
-        persistent_db_session,
-        protocol=ExternalIntegration.LOGGLY,
-        goal=ExternalIntegration.LOGGING_GOAL
-    )
-    integration.url = "http://example.com/%s"
-    integration.password = "a_token"
-    return integration
-
-
-@pytest.fixture(scope="session")
 def create_test_place():
     """Returns a factory function for creating places for tests"""
     def _create_test_place(db_session, external_id=None, external_name=None, place_type=None,
@@ -155,7 +143,10 @@ def create_test_place():
             longitude = -90 + (random.randrange(1, 800) / 10)
             geometry = f"SRID=4326;POINT({latitude} {longitude})"
         elif isinstance(geometry, str):
-            geometry = GeometryUtility.from_geojson(geometry)
+            if geometry[0] == '{':          # It's probably JSON.                
+                geometry = GeometryUtility.from_geojson(geometry)
+            elif geometry[:5] == 'SRID=':   # It's already a geometry string
+                ...                         # so don't do anything.
 
         external_id = external_id or str(uuid.uuid4())
         external_name = external_name or external_id
@@ -166,6 +157,7 @@ def create_test_place():
             "type": place_type,
             "abbreviated_name": abbreviated_name,
             "parent": parent,
+            "geometry": geometry,
         }
         (place, _) = get_one_or_create(db_session, Place, **create_kwargs)
         db_session.commit()
@@ -249,6 +241,13 @@ def places(persistent_db_session, create_test_place):
         persistent_db_session, external_id="Kings", external_name="Kings", place_type=Place.COUNTY,
         abbreviated_name=None, parent=test_places["new_york_state"],
         geometry=(TEST_DATA_DIR / 'crude_kings_county_geojson.json').read_text()
+    )
+
+    # Lake Placid, NY
+    test_places["lake_placid_ny"] = create_test_place(
+        persistent_db_session, external_id="LakePlacid", external_name="Lake Placid", place_type=Place.CITY,
+        abbreviated_name=None, parent=test_places["new_york_state"],
+        geometry='SRID=4326;POINT(-73.59 44.17)'
     )
 
     # Crude New York County

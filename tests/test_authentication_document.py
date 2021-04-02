@@ -5,7 +5,7 @@ from library_registry.model import Audience, Place, ServiceArea
 from library_registry.problem_details import INVALID_INTEGRATION_DOCUMENT
 from library_registry.util.problem_detail import ProblemDetail
 
-from mocks import MockPlace
+from .mocks import MockPlace
 
 # Alias for a long class name
 AuthDoc = AuthenticationDocument
