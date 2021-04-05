@@ -26,6 +26,7 @@ def db_session():
     """Supply a new session object for the test database to every test function"""
     session = SessionManager.session(Configuration.database_url(test=True))
     yield session
+    session.rollback()
     session.close()
 
 
@@ -87,6 +88,7 @@ def init_test_db():
 def persistent_db_session():
     session = SessionManager.session(Configuration.database_url(test=True))
     yield session
+    session.rollback()
     session.close()
 
 
