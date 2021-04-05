@@ -42,9 +42,9 @@ class GeometryUtility():
     def point_from_string(cls, s):
         """
         Parse a string representing latitude and longitude into a Geometry object
-        
+
         :param s: (str) - Comma separated lat/long pair
-        :return: (str) - 
+        :return: (str) -
         """
         if not s or ',' not in s:
             return None
@@ -69,6 +69,6 @@ class GeometryUtility():
 
         :param latitude:
         :param longitude:
-        :return: (str) - Formatted string: 'SRID=4326;POINT ({longitude} {latitude})'
+        :return: (str) - Formatted string: 'SRID=4326;POINT({longitude} {latitude})'
         """
-        return 'SRID=4326;POINT (%s %s)' % (longitude, latitude)
+        return 'SRID=4326;POINT(%s %s)' % (longitude, latitude)

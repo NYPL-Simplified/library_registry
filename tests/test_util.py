@@ -14,7 +14,7 @@ class TestGeometryUtility():
     @pytest.mark.parametrize(
         "ip,expected",
         [
-            ("65.88.88.124", "SRID=4326;POINT (-73.9169 40.8056)"),
+            ("65.88.88.124", "SRID=4326;POINT(-73.9169 40.8056)"),
             ("127.0.0.1", None)
         ]
     )
@@ -34,8 +34,8 @@ class TestGeometryUtility():
     @pytest.mark.parametrize(
         "input_val,expected",
         [
-            ("40.7769, -73.9813", "SRID=4326;POINT (-73.9813 40.7769)"),
-            ("40.7769,-73.9813", "SRID=4326;POINT (-73.9813 40.7769)"),
+            ("40.7769, -73.9813", "SRID=4326;POINT(-73.9813 40.7769)"),
+            ("40.7769,-73.9813", "SRID=4326;POINT(-73.9813 40.7769)"),
         ]
     )
     def test_point_from_string(self, input_val, expected):
@@ -43,4 +43,4 @@ class TestGeometryUtility():
 
     def test_point(self):
         point = GeometryUtility.point("80", "-4")
-        assert point == 'SRID=4326;POINT (-4 80)'
+        assert point == 'SRID=4326;POINT(-4 80)'
