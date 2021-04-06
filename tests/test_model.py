@@ -3,9 +3,7 @@ import json
 import random
 
 import pytest
-from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm.exc import MultipleResultsFound
 
 from library_registry.config import Configuration
 from library_registry.emailer import Emailer
@@ -13,210 +11,14 @@ from library_registry.model import (Admin, Audience, CollectionSummary,
                                     ConfigurationSetting,
                                     DelegatedPatronIdentifier,
                                     ExternalIntegration, Hyperlink, Library,
-                                    LibraryAlias, Place, PlaceAlias,
+                                    LibraryAlias, Place,
                                     Validation, create, get_one_or_create)
 from library_registry.util import GeometryUtility
 
 from . import DatabaseTest
 
 
-class TestPlace:
-
-    def test_parse_name(self):
-        m = Place.parse_name
-        assert m("Kern County") == ("Kern", Place.COUNTY)
-        assert m("New York State") == ("New York", Place.STATE)
-        assert m("Chicago, IL") == ("Chicago, IL", None)
-
-    def test_name_parts(self):
-        m = Place.name_parts
-        assert m("Boston, MA") == ["MA", "Boston"]
-        assert m("Boston, MA,") == ["MA", "Boston"]
-        assert m("Anytown, USA") == ["USA", "Anytown"]
-        assert m("Lake County, Ohio, US") == ["US", "Ohio", "Lake County"]
-
-    def test_lookup_by_name(self):
-
-        # There are two places in California called 'Santa Barbara': a
-        # city, and a county (which includes the city).
-        sb_city = self._place(external_name="Santa Barbara", type=Place.CITY)
-        sb_county = self._place(external_name="Santa Barbara", type=Place.COUNTY)
-
-        # If we look up "Santa Barbara" by name, we get the city.
-        m = Place.lookup_by_name
-        assert m(self._db, "Santa Barbara").all() == [sb_city]
-
-        # To get Santa Barbara County, we have to refer to "Santa Barbara County"
-        assert m(self._db, "Santa Barbara County").all() == [sb_county]
-
-    def test_lookup_inside(self):
-        us = self.crude_us
-        zip_10018 = self.zip_10018
-        nyc = self.new_york_city
-        new_york = self.new_york_state
-        connecticut = self.connecticut_state
-        manhattan_ks = self.manhattan_ks
-        kings_county = self.crude_kings_county
-        zip_12601 = self.zip_12601
-
-        # In most cases, we want to test that both versions of
-        # lookup_inside() return the same result.
-        def lookup_both_ways(parent, name, expect):
-            assert parent.lookup_inside(name, using_overlap=True) == expect
-            assert parent.lookup_inside(name, using_overlap=False) == expect
-
-        everywhere = Place.everywhere(self._db)
-        lookup_both_ways(everywhere, "US", us)
-        lookup_both_ways(everywhere, "NY", new_york)
-        lookup_both_ways(us, "NY", new_york)
-
-        lookup_both_ways(new_york, "10018", zip_10018)
-        lookup_both_ways(us, "10018, NY", zip_10018)
-        lookup_both_ways(us, "New York, NY", nyc)
-        lookup_both_ways(new_york, "New York", nyc)
-
-        # Test that the disambiguators "State" and "County" are handled
-        # properly.
-        lookup_both_ways(us, "New York State", new_york)
-        lookup_both_ways(us, "Kings County, NY", kings_county)
-        lookup_both_ways(us, "New York State", new_york)
-
-        lookup_both_ways(us, "Manhattan, KS", manhattan_ks)
-        lookup_both_ways(us, "Manhattan, Kansas", manhattan_ks)
-
-        lookup_both_ways(new_york, "Manhattan, KS", None)
-        lookup_both_ways(connecticut, "New York", None)
-        lookup_both_ways(new_york, "Manhattan, KS", None)
-        lookup_both_ways(connecticut, "New York", None)
-        lookup_both_ways(connecticut, "New York, NY", None)
-        lookup_both_ways(connecticut, "10018", None)
-
-        # Even though the parent of a ZIP code is a state, special
-        # code allows you to look them up within the nation.
-        lookup_both_ways(us, "10018", zip_10018)
-        lookup_both_ways(new_york, "10018", zip_10018)
-
-        # You can't find a place 'inside' itself.
-        lookup_both_ways(us, "US", None)
-        lookup_both_ways(new_york, "NY, US, 10018", None)
-
-        # Or 'inside' a place that's known to be smaller than it.
-        lookup_both_ways(kings_county, "NY", None)
-        lookup_both_ways(us, "NY, 10018", None)
-        lookup_both_ways(zip_10018, "NY", None)
-
-        # There is a limited ability to look up places even when the
-        # name of the city is not in the database -- a representative
-        # postal code is returned. This goes through
-        # lookup_one_through_external_source, which is tested in more
-        # detail below.
-        lookup_both_ways(new_york, "Poughkeepsie", zip_12601)
-
-        # Now test cases where using_overlap makes a difference.
-        #
-        # First, the cases where using_overlap=True performs better.
-        #
-
-        # Looking up the name of a county by itself only works with
-        # using_overlap=True, because the .parent of a county is its
-        # state, not the US.
-        #
-        # Many county names are ambiguous, but this lets us parse
-        # the ones that are not.
-        assert everywhere.lookup_inside("Kings County, US", using_overlap=True) == kings_county
-
-        # Neither of these is obviously better.
-        assert us.lookup_inside("Manhattan") is None
-        with pytest.raises(MultipleResultsFound) as exc:
-            us.lookup_inside("Manhattan", using_overlap=True)
-        assert "More than one place called Manhattan inside United States." in str(exc.value)
-
-        # Now the cases where using_overlap=False performs better.
-
-        # "New York, US" is a little ambiguous, but they probably mean
-        # the state.
-        assert us.lookup_inside("New York") == new_york
-        with pytest.raises(MultipleResultsFound) as exc:
-            us.lookup_inside("New York", using_overlap=True)
-        assert "More than one place called New York inside United States." in str(exc.value)
-
-        # "New York, New York" can only be parsed by parentage.
-        assert us.lookup_inside("New York, New York") == nyc
-        with pytest.raises(MultipleResultsFound) as exc:
-            us.lookup_inside("New York, New York", using_overlap=True)
-        assert "More than one place called New York inside United States." in str(exc.value)
-
-        # Using geographic overlap has another problem -- although the
-        # name of the method is 'lookup_inside', we're actually
-        # checking for _intersection_. Places that overlap are treated
-        # as being inside *each other*.
-        assert zip_10018.lookup_inside("New York", using_overlap=True) == nyc
-        assert zip_10018.lookup_inside("New York", using_overlap=False) is None
-
-    def test_lookup_one_through_external_source(self):
-        # We're going to find the approximate location of Poughkeepsie
-        # even though the database doesn't have a Place named
-        # "Poughkeepsie".
-        #
-        # We're able to do this because uszipcode knows which ZIP
-        # codes are in Poughkeepsie, and we do have a Place for one of
-        # those ZIP codes.
-        zip_12601 = self.zip_12601
-        new_york = self.new_york_state
-        connecticut = self.connecticut_state
-
-        m = new_york.lookup_one_through_external_source
-        poughkeepsie_zips = m("Poughkeepsie")
-
-        # There are three ZIP codes in Poughkeepsie, and uszipcode
-        # knows about all of them, but the only Place returned by
-        # lookup_through_external_source is the one for the ZIP code
-        # we know about.
-        assert poughkeepsie_zips == zip_12601
-
-        # If we ask about a real place but there is no corresponding
-        # postal code Place in the database, we get nothing.
-        assert m("Woodstock") is None
-
-        # Similarly if we ask about a nonexistent place.
-        assert m("ZXCVB") is None
-
-        # Or if we try to use uszipcode on a place that's not in the US.
-        ontario = self._place('35', 'Ontario', Place.STATE, 'ON', None, None)
-        assert ontario.lookup_one_through_external_source('Hamilton') is None
-
-        # Calling this method on a Place that's not a state doesn't
-        # make sense (because uszipcode only knows about cities within
-        # states), and the result is always None.
-        assert zip_12601.lookup_one_through_external_source("Poughkeepsie") is None
-
-        # lookup_one_through_external_source operates on the same
-        # rules as lookup_inside -- the city you're looking up must be
-        # geographically inside the Place whose method you're calling.
-        assert connecticut.lookup_one_through_external_source("Poughkeepsie") is None
-
-    def test_served_by(self):
-        zip = self.zip_10018
-        nyc = self.new_york_city
-        new_york = self.new_york_state
-        connecticut = self.connecticut_state
-
-        # There are two libraries here...
-        nypl = self._library("New York Public Library", eligibility_areas=[nyc])
-        ct_state = self._library("Connecticut State Library", eligibility_areas=[connecticut])
-
-        # ...but only one serves the 10018 ZIP code.
-        assert zip.served_by().all() == [nypl]
-
-        assert nyc.served_by().all() == [nypl]
-        assert connecticut.served_by().all() == [ct_state]
-
-        # New York and Connecticut share a border, and the Connecticut
-        # state library serves the entire state, including the
-        # border. Internally, we use overlaps_not_counting_border() to avoid
-        # concluding that the Connecticut state library serves New
-        # York.
-        assert new_york.served_by().all() == [nypl]
+# TestPlace has been moved to tests/models/test_place.py
 
 
 class TestLibrary(DatabaseTest):
