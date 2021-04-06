@@ -47,7 +47,7 @@ class TestAppHelpers(ControllerTest):
             assert route_function() == "Called with location None"
 
         with self.app.test_request_context("/?_location=-10,10"):
-            assert route_function() == "Called with location SRID=4326;POINT (10.0 -10.0)"
+            assert route_function() == "Called with location SRID=4326;POINT(10.0 -10.0)"
 
     def test_compressible(self):
         # Prepare a value and a gzipped version of the value.
