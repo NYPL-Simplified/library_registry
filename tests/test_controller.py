@@ -1,7 +1,3 @@
-from nose.tools import (
-    eq_,
-    set_trace,
-)
 import base64
 import datetime
 import os
@@ -50,6 +46,10 @@ from model import (
 from util.http import RequestTimedOut
 from problem_details import *
 from config import Configuration
+
+
+def eq_(a, b):
+    assert a == b
 
 
 class MockLibraryRegistry(LibraryRegistry):
@@ -135,7 +135,7 @@ class TestLibraryRegistryAnnotator(ControllerTest):
             eq_('http://localhost/library/{uuid}', opds_link.get("href"))
             eq_('http://librarysimplified.org/rel/registry/library', opds_link.get("rel"))
             eq_('application/opds+json', opds_link.get("type"))
-            eq_(True, opds_link.get("templated"))
+            assert opds_link.get("templated") is True
 
             eq_('http://localhost/search', search_link.get("href"))
             eq_("search", search_link.get("rel"))
@@ -184,7 +184,7 @@ class TestLibraryRegistry(ControllerTest):
         )
 
         # No Adobe Vendor ID was set up.
-        eq_(None, self.library_registry.adobe_vendor_id)
+        assert self.library_registry.adobe_vendor_id is None
 
         # Let's configure one.
         self.vendor_id_setup()
@@ -752,7 +752,7 @@ class TestLibraryRegistryController(ControllerTest):
         up.
         """
         controller = LibraryRegistryController(self.library_registry)
-        eq_(None, controller.emailer)
+        assert controller.emailer is None
 
     def test_nearby(self):
         with self.app.test_request_context("/"):
@@ -797,7 +797,7 @@ class TestLibraryRegistryController(ControllerTest):
             eq_(unquote(url_for("library", uuid="{uuid}")), library_link["href"])
             eq_("http://librarysimplified.org/rel/registry/library", library_link["rel"])
             eq_("application/opds+json", library_link["type"])
-            eq_(True, library_link.get("templated"))
+            assert library_link.get("templated") is True
 
             eq_("VENDORID", catalog["metadata"]["adobe_vendor_id"])
 
@@ -931,7 +931,7 @@ class TestLibraryRegistryController(ControllerTest):
             eq_(unquote(url_for("library", uuid="{uuid}")), library_link["href"])
             eq_("http://librarysimplified.org/rel/registry/library", library_link["rel"])
             eq_("application/opds+json", library_link["type"])
-            eq_(True, library_link.get("templated"))
+            assert library_link.get("templated") is True
 
             eq_("VENDORID", catalog["metadata"]["adobe_vendor_id"])
 
@@ -1487,11 +1487,11 @@ class TestLibraryRegistryController(ControllerTest):
             # like the client asked to be put into production.
             eq_(Library.PRODUCTION_STAGE, library.library_stage)
 
-            eq_(True, library.anonymous_access)
-            eq_(True, library.online_registration)
+            assert library.anonymous_access is True
+            assert library.online_registration is True
 
             [collection_summary] = library.collections
-            eq_(None, collection_summary.language)
+            assert collection_summary.language is None
             eq_(100, collection_summary.size)
             [service_area] = library.service_areas
             eq_(self.kansas_state.id, service_area.place_id)
@@ -1620,7 +1620,7 @@ class TestLibraryRegistryController(ControllerTest):
             assert library != None
             eq_("A Library", library.name)
             eq_("New and improved", library.description)
-            eq_(None, library.web_url)
+            assert library.web_url is None
             encoded_image = base64.b64encode(image_data).decode("utf8")
             eq_("data:image/png;base64,%s" % encoded_image, library.logo)
             # The library's library_stage has been updated to reflect

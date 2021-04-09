@@ -6,7 +6,7 @@ from flask_bcrypt import (
 )
 import datetime
 import logging
-from nose.tools import set_trace
+
 import os
 import re
 import json

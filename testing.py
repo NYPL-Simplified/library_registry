@@ -1,9 +1,7 @@
 from datetime import datetime
 import logging
 import os
-from nose.tools import (
-    set_trace
-)
+
 from geoalchemy2 import Geometry
 from sqlalchemy import func
 from sqlalchemy.orm.session import Session

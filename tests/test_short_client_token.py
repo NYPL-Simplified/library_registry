@@ -1,10 +1,8 @@
 import base64
-from nose.tools import (
-    eq_,
-    set_trace,
-    assert_raises_regexp
-)
 import logging
+
+import pytest
+
 from util.short_client_token import ShortClientTokenEncoder
 from model import (
     DelegatedPatronIdentifier,
@@ -12,6 +10,10 @@ from model import (
 )
 
 from . import DatabaseTest
+
+def eq_(a, b):
+    assert a == b
+
 
 class TestShortClientTokenEncoder(object):
 
@@ -57,21 +59,22 @@ class TestShortClientTokenEncoder(object):
 
     def test_must_provide_library_information(self):
         error = "Both library short name and secret must be specified."
-        assert_raises_regexp(
-            ValueError, error, self.encoder.encode, None, None, None
-        )
-        assert_raises_regexp(
-            ValueError, error, self.encoder.encode, "A", None, None
-        )
-        assert_raises_regexp(
-            ValueError, error, self.encoder.encode, None, "A", None
-        )
+        with pytest.raises(ValueError) as exc:
+            self.encoder.encode(None, None, None)
+        assert error in exc.value
+
+        with pytest.raises(ValueError) as exc:
+            self.encoder.encode("A", None, None)
+        assert error in exc.value
+        
+        with pytest.raises(ValueError) as exc:
+            self.encoder.encode(None, "A", None)
+        assert error in exc.value
 
     def test_cannot_encode_null_patron_identifier(self):
-        assert_raises_regexp(
-            ValueError, "No patron identifier specified",
-            self.encoder.encode, "lib", "My library secret", None
-        )
+        with pytest.raises(ValueError) as exc:
+            self.encoder.encode("lib", "My library secret", None)
+        assert "No patron identifier specified" in exc.value
 
     def test_short_client_token_encode_known_value(self):
         """Verify that the encoding algorithm gives a known value on known
@@ -153,68 +156,52 @@ class TestShortClientTokenDecoder(DatabaseTest):
         """Test various token decoding errors"""
         m = self.decoder._decode
 
-        assert_raises_regexp(
-            ValueError,
-            'Cannot decode an empty token.',
-            self.decoder.decode,
-            self._db, ""
-        )
+        with pytest.raises(ValueError) as exc:
+            self.decoder.decode(self._db, "")
+        assert 'Cannot decode an empty token.' in exc.value
 
-        assert_raises_regexp(
-            ValueError,
-            'Supposed client token "no pipes" does not contain a pipe.',
-            self.decoder.decode,
-            self._db, "no pipes"
-        )
+        with pytest.raises(ValueError) as exc:
+            self.decoder.decode(self._db, "no pipes")
+        assert 'Supposed client token "no pipes" does not contain a pipe.' in exc.value
 
         # A token has to contain at least two pipe characters.
-        assert_raises_regexp(
-            ValueError, "Invalid client token",
-            m, self._db, "foo|", "signature"
-        )
-
+        with pytest.raises(ValueError) as exc:
+            m(self._db, "foo|", "signature")
+        assert "Invalid client token" in exc.value
+        
         # The expiration time must be numeric.
-        assert_raises_regexp(
-            ValueError, 'Expiration time "a time" is not numeric',
-            m, self._db, "library|a time|patron", "signature"
-        )
+        with pytest.raises(ValueError) as exc:
+            m(self._db, "library|a time|patron", "signature")
+        assert 'Expiration time "a time" is not numeric' in exc.value
 
         # The patron identifier must not be blank.
-        assert_raises_regexp(
-            ValueError, 'Token library\|1234\| has empty patron identifier',
-            m, self._db, "library|1234|", "signature"
-        )
+        with pytest.raises(ValueError) as exc:
+            m(self._db, "library|1234|", "signature")
+        assert 'Token library\|1234\| has empty patron identifier' in exc.value
 
         # The library must be a known one.
-        assert_raises_regexp(
-            ValueError,
-            'I don\'t know how to handle tokens from library "UNKNOWN"',
-            m, self._db, "unknown|1234|patron", "signature"
-        )
+        with pytest.raises(ValueError) as exc:
+            m(self._db, "unknown|1234|patron", "signature")
+        assert 'I don\'t know how to handle tokens from library "UNKNOWN"' in exc.value
 
         # The token must not have expired.
-        assert_raises_regexp(
-            ValueError,
-            'Token library\|1234\|patron expired at 2017-01-01 20:34:00',
-            m, self._db, "library|1234|patron", "signature"
-        )
+        with pytest.raises(ValueError) as exc:
+            m(self._db, "library|1234|patron", "signature")
+        assert 'Token library\|1234\|patron expired at 2017-01-01 20:34:00' in exc.value
 
         # (Even though the expiration number here is much higher, this
         # token is also expired, because the expiration date
         # calculation for an old-style token starts at a different
         # epoch and treats the expiration number as seconds rather
         # than minutes.)
-        assert_raises_regexp(
-            ValueError,
-            'Token library\|1500000000\|patron expired at 2017-07-14 02:40:00',
-            m, self._db, "library|1500000000|patron", "signature"
-        )
+        with pytest.raises(ValueError) as exc:
+            m(self._db, "library|1500000000|patron", "signature")
+        assert 'Token library\|1500000000\|patron expired at 2017-07-14 02:40:00' in exc.value
 
         # Finally, the signature must be valid.
-        assert_raises_regexp(
-            ValueError, 'Invalid signature for',
-            m, self._db, "library|99999999999|patron", "signature"
-        )
+        with pytest.raises(ValueError) as exc:
+            m(self._db, "library|99999999999|patron", "signature")
+        assert 'Invalid signature for' in exc.value
 
     def test_decode_uses_adobe_base64_encoding(self):
 
@@ -247,10 +234,8 @@ class TestShortClientTokenDecoder(DatabaseTest):
 
         # The code in _decode_short_client_token ran. Since there was no
         # test failure, it ran successfully.
-        eq_(True, self.decoder.test_code_ran)
+        assert self.decoder.test_code_ran is True
 
-        assert_raises_regexp(
-            ValueError, "Invalid password",
-            self.decoder.decode_two_part,
-            self._db, fake_username, "I am not a real encoded signature"
-        )
+        with pytest.raises(ValueError) as exc:
+            self.decoder.decode_two_part(self._db, fake_username, "I am not a real encoded signature")
+        assert "Invalid password" in exc.value

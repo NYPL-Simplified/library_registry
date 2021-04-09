@@ -1,7 +1,7 @@
 import datetime
 import flask
 from flask import Response
-from nose.tools import set_trace
+
 import base64
 import re
 import requests

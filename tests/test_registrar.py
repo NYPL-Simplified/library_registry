@@ -1,6 +1,3 @@
-from nose.tools import (
-    eq_,
-)
 import json
 
 from authentication_document import AuthenticationDocument
@@ -12,6 +9,10 @@ from testing import (
     DummyHTTPResponse,
 )
 from util.problem_detail import ProblemDetail
+
+
+def eq_(a, b):
+    assert a == b
 
 
 class TestRegistrar(DatabaseTest):
@@ -44,7 +45,7 @@ class TestRegistrar(DatabaseTest):
         # we presume success and return nothing.
         registrar.RETURN_VALUE = (object(), object(), object())
         result = registrar.reregister(library)
-        eq_(None, result)
+        assert result is None
 
     def test_opds_response_links(self):
         """Test the opds_response_links method.
@@ -72,16 +73,8 @@ class TestRegistrar(DatabaseTest):
         eq_([auth_url], LibraryRegistrar.opds_response_links(
             response, rel
         ))
-        eq_(True,
-            LibraryRegistrar.opds_response_links_to_auth_document(
-                response, auth_url
-            )
-        )
-        eq_(False,
-            LibraryRegistrar.opds_response_links_to_auth_document(
-                response, "Some other URL"
-            )
-        )
+        assert LibraryRegistrar.opds_response_links_to_auth_document(response, auth_url) is True
+        assert LibraryRegistrar.opds_response_links_to_auth_document(response, "Some other URL") is False
 
         # The same feed, but with an additional link in the
         # Link header. Both links are returned.
@@ -93,11 +86,7 @@ class TestRegistrar(DatabaseTest):
         eq_(set([auth_url, "http://another-auth-document"]),
             set(LibraryRegistrar.opds_response_links(response, rel))
         )
-        eq_(True,
-            LibraryRegistrar.opds_response_links_to_auth_document(
-                response, auth_url
-            )
-        )
+        assert LibraryRegistrar.opds_response_links_to_auth_document(response, auth_url) is True
 
         # A similar feed, but with a relative URL, which is made absolute
         # by opds_response_links.
@@ -111,11 +100,7 @@ class TestRegistrar(DatabaseTest):
         eq_(["http://opds-server/auth-document"],
             LibraryRegistrar.opds_response_links(response, rel)
         )
-        eq_(True,
-            LibraryRegistrar.opds_response_links_to_auth_document(
-                response, "http://opds-server/auth-document"
-            )
-        )
+        assert LibraryRegistrar.opds_response_links_to_auth_document(response, "http://opds-server/auth-document") is True
 
         # An OPDS 1 feed that has no link.
         response = DummyHTTPResponse(
@@ -124,11 +109,7 @@ class TestRegistrar(DatabaseTest):
         eq_([], LibraryRegistrar.opds_response_links(
             response, rel
         ))
-        eq_(False,
-            LibraryRegistrar.opds_response_links_to_auth_document(
-                response, auth_url
-            )
-        )
+        assert LibraryRegistrar.opds_response_links_to_auth_document(response, auth_url) is False
 
         # An OPDS 2 feed that has a link.
         catalog = json.dumps({"links": {rel: { "href": auth_url }}})
@@ -138,11 +119,7 @@ class TestRegistrar(DatabaseTest):
         eq_([auth_url], LibraryRegistrar.opds_response_links(
             response, rel
         ))
-        eq_(True,
-            LibraryRegistrar.opds_response_links_to_auth_document(
-                response, auth_url
-            )
-        )
+        assert LibraryRegistrar.opds_response_links_to_auth_document(response, auth_url) is True
 
         # An OPDS 2 feed that has no link.
         catalog = json.dumps({"links": {}})
@@ -152,21 +129,13 @@ class TestRegistrar(DatabaseTest):
         eq_([], LibraryRegistrar.opds_response_links(
             response, rel
         ))
-        eq_(False,
-            LibraryRegistrar.opds_response_links_to_auth_document(
-                response, auth_url
-            )
-        )
+        assert LibraryRegistrar.opds_response_links_to_auth_document(response, auth_url) is False
 
         # A malformed feed.
         response = DummyHTTPResponse(
             200, {"Content-Type": OPDSCatalog.OPDS_TYPE}, "Not a real feed"
         )
-        eq_(False,
-            LibraryRegistrar.opds_response_links_to_auth_document(
-                response, auth_url
-            )
-        )
+        assert LibraryRegistrar.opds_response_links_to_auth_document(response, auth_url) is False
 
         # An Authentication For OPDS document.
         response = DummyHTTPResponse(
@@ -176,11 +145,7 @@ class TestRegistrar(DatabaseTest):
         eq_([auth_url], LibraryRegistrar.opds_response_links(
             response, rel
         ))
-        eq_(True,
-            LibraryRegistrar.opds_response_links_to_auth_document(
-                response, auth_url
-            )
-        )
+        assert LibraryRegistrar.opds_response_links_to_auth_document(response, auth_url) is True
 
         # A malformed Authentication For OPDS document.
         response = DummyHTTPResponse(
@@ -190,11 +155,7 @@ class TestRegistrar(DatabaseTest):
         eq_([], LibraryRegistrar.opds_response_links(
             response, rel
         ))
-        eq_(False,
-            LibraryRegistrar.opds_response_links_to_auth_document(
-                response, auth_url
-            )
-        )
+        assert LibraryRegistrar.opds_response_links_to_auth_document(response, auth_url) is False
 
     def test__required_email_address(self):
         """Validate the code that makes sure an input is a mailto: URI."""

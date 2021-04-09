@@ -1,8 +1,5 @@
 from StringIO import StringIO
-from nose.tools import (
-    eq_,
-    set_trace,
-)
+
 from sqlalchemy import func
 from geoalchemy2 import Geography
 from model import (
@@ -19,6 +16,10 @@ from . import (
 from geometry_loader import GeometryLoader
 
 
+def eq_(a, b):
+    assert a == b
+
+
 class TestGeometryLoader(DatabaseTest):
 
     def setup(self):
@@ -30,10 +31,10 @@ class TestGeometryLoader(DatabaseTest):
         metadata = '{"parent_id": null, "name": "77977", "id": "77977", "type": "postal_code", "aliases": [{"name": "The 977", "language": "eng"}]}'
         geography = '{"type": "Polygon", "coordinates": [[[-96.840066, 28.683039], [-96.830637, 28.690131], [-96.835048, 28.693599], [-96.833515, 28.694926], [-96.82657, 28.699584], [-96.822495, 28.695826], [-96.821248, 28.696391], [-96.814249, 28.700983], [-96.772337, 28.722765], [-96.768804, 28.725363], [-96.768564, 28.725046], [-96.767246, 28.723276], [-96.765295, 28.722084], [-96.764568, 28.720456], [-96.76254, 28.718483], [-96.763087, 28.717521], [-96.761814, 28.716488], [-96.761088, 28.713623], [-96.762231, 28.712798], [-96.75967, 28.709812], [-96.781093, 28.677548], [-96.784803, 28.675363], [-96.793788, 28.669546], [-96.791527, 28.667603], [-96.808567, 28.678507], [-96.81505, 28.682946], [-96.820191, 28.684517], [-96.827178, 28.679867], [-96.828626, 28.681719], [-96.831309, 28.680451], [-96.83565, 28.677724], [-96.840066, 28.683039]]]}'
         texas_zip, is_new = self.loader.load(metadata, geography)
-        eq_(True, is_new)
+        assert is_new is True
         eq_("77977", texas_zip.external_id)
         eq_("77977", texas_zip.external_name)
-        eq_(None, texas_zip.parent)
+        assert texas_zip.parent is None
         eq_("postal_code", texas_zip.type)
 
         [alias] = texas_zip.aliases
@@ -46,7 +47,7 @@ class TestGeometryLoader(DatabaseTest):
         new_york, is_new = self.loader.load(metadata, geography)
         eq_("NY", new_york.abbreviated_name)
         eq_("New York", new_york.external_name)
-        eq_(True, is_new)
+        assert is_new is True
 
         # We can measure the distance in kilometers between New York
         # and Texas.
@@ -63,7 +64,7 @@ class TestGeometryLoader(DatabaseTest):
         # the Place object is updated.
         geography = '{"type": "Point", "coordinates": [-74, 44]}'
         new_york_2, is_new = self.loader.load(metadata, geography)
-        eq_(False, is_new)
+        assert is_new is False
         eq_(new_york, new_york_2)
 
         # This changes the distance between the two points.
@@ -78,7 +79,7 @@ class TestGeometryLoader(DatabaseTest):
             self._db, Place, parent=None, external_name="United States",
             external_id="US", type="nation", geometry='SRID=4326;POINT(-75 43)'
         )
-        eq_(None, old_us.abbreviated_name)
+        assert old_us.abbreviated_name is None
         old_alias = get_one_or_create(
             self._db, PlaceAlias, name="USA", language="eng", place=old_us
         )
@@ -102,7 +103,7 @@ class TestGeometryLoader(DatabaseTest):
         assert isinstance(us, Place)
         assert isinstance(alabama, Place)
         assert isinstance(montgomery, Place)
-        eq_(None, us.parent)
+        assert us.parent is None
         eq_(us, alabama.parent)
         eq_(alabama, montgomery.parent)
 

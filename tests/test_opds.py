@@ -1,7 +1,3 @@
-from nose.tools import (
-    eq_,
-    set_trace,
-)
 import datetime
 import json
 
@@ -19,6 +15,10 @@ from model import (
     Validation,
 )
 from opds import OPDSCatalog
+
+def eq_(a, b):
+    assert a == b
+
 
 class TestOPDSCatalog(DatabaseTest):
 
@@ -126,15 +126,15 @@ class TestOPDSCatalog(DatabaseTest):
 
         # There are no libraries, and the limit is 2, so a feed of libraries would not be large.
         eq_(0, query.count())
-        eq_(False, m(self._db, query))
+        assert m(self._db, query) is False
 
         # Make some libraries, and the feed becomes large.
         [self._library() for x in range(2)]
-        eq_(True, m(self._db, query))
+        assert m(self._db, query) is True
 
         # It also works with a list.
-        eq_(True, m(self._db, [1,2]))
-        eq_(False, m(self._db, [1]))
+        assert m(self._db, [1,2]) is True
+        assert m(self._db, [1])) is False
 
     def test_library_catalog(self):
 
@@ -251,8 +251,8 @@ class TestOPDSCatalog(DatabaseTest):
 
         # If there's not enough information to make a link,
         # _hyperlink_args returns None.
-        eq_(None, m(None))
-        eq_(None, m(hyperlink))
+        assert m(None) is None
+        assert m(hyperlink) is None
 
         # Now there's enough for a link, but there's no Validation.
         hyperlink.href = "a url"
@@ -282,4 +282,4 @@ class TestOPDSCatalog(DatabaseTest):
         # If for some reason the Resource is removed from the Hyperlink,
         # _hyperlink_args stops working.
         hyperlink.resource = None
-        eq_(None, m(hyperlink))
+        assert m(hyperlink) is None

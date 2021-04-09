@@ -1,9 +1,5 @@
 import json
-from nose.tools import (
-    assert_raises_regexp,
-    set_trace,
-    eq_,
-)
+import pytest
 from StringIO import StringIO
 
 from config import Configuration
@@ -38,6 +34,10 @@ from . import (
 )
 
 
+def eq_(a, b):
+    assert a == b
+
+
 class TestLibraryScript(DatabaseTest):
 
     def test_libraries(self):
@@ -58,10 +58,9 @@ class TestLibraryScript(DatabaseTest):
         # Any library can be processed if it's identified by name.
         for l in library, ignored:
             eq_([l], script.libraries(l.name))
-        assert_raises_regexp(
-            ValueError, "No library with name 'Nonexistent Library'",
-            script.libraries, "Nonexistent Library"
-        )
+        with pytest.raises(ValueError) as exc:
+            script.libraries("Nonexistent Library")
+        assert "No library with name 'Nonexistent Library'" in exc.value
 
         # If no library is identified by name, the output of
         # all_libraries is used as the list of libraries.
@@ -268,23 +267,17 @@ class TestConfigureIntegrationScript(DatabaseTest):
     def test_load_integration(self):
         m = ConfigureIntegrationScript._integration
 
-        assert_raises_regexp(
-            ValueError,
-            "An integration must by identified by either ID, name, or the combination of protocol and goal.",
-            m, self._db, None, None, "protocol", None
-        )
+        with pytest.raises(ValueError) as exc:
+            m(self._db, None, None, "protocol", None)
+        assert "An integration must by identified by either ID, name, or the combination of protocol and goal." in exc.value
 
-        assert_raises_regexp(
-            ValueError,
-            "No integration with ID notanid.",
-            m, self._db, "notanid", None, None, None
-        )
+        with pytest.raises(ValueError) as exc:
+            m(self._db, "notanid", None, None, None)
+        assert "No integration with ID notanid." in exc.value
 
-        assert_raises_regexp(
-            ValueError,
-            'No integration with name "Unknown integration". To create it, you must also provide protocol and goal.',
-            m, self._db, None, "Unknown integration", None, None
-        )
+        with pytest.raises(ValueError) as exc:
+            m(self._db, None, "Unknown integration", None, None)
+        assert 'No integration with name "Unknown integration". To create it, you must also provide protocol and goal.' in exc.value
 
         integration, ignore = create(
             self._db, ExternalIntegration,
@@ -379,7 +372,7 @@ class TestRegistrationRefreshScript(DatabaseTest):
 
         # LibraryRegistrar.reregister() was called twice: on
         # success_library and on failure_library.
-        eq_(None, script.libraries_called_with)
+        assert script.libraries_called_with is None
         eq_([success_library, failure_library], mock_registrar.reregistered)
 
         # We can also tell the script to reregister one specific
@@ -413,11 +406,9 @@ class TestSetCoverageAreaScript(DatabaseTest):
         for arg in ['service-area', 'focus-area']:
             args = ["--library=%s" % library.name,
                     '--%s={"US": "San Francisco"}' % arg]
-            assert_raises_regexp(
-                ValueError,
-                "Unknown places:",
-                s.run, args, place_class=MockPlace
-            )
+            with pytest.raises(ValueError) as exc:
+                s.run(args, place_class=MockPlace)
+            assert "Unknown places:" in exc.value
 
     def test_ambiguous_place(self):
 
@@ -428,11 +419,9 @@ class TestSetCoverageAreaScript(DatabaseTest):
         for arg in ['service-area', 'focus-area']:
             args = ["--library=%s" % library.name,
                     '--%s={"OO": "everywhere"}' % arg]
-            assert_raises_regexp(
-                ValueError,
-                "Ambiguous places:",
-                s.run, args, place_class=MockPlace
-            )
+            with pytest.raises(ValueError) as exc:
+                s.run(args, place_class=MockPlace)
+            assert "Ambiguous places:" in exc.value
         MockPlace.by_name = {}
 
     def test_success(self):
@@ -545,21 +534,15 @@ class TestConfigureVendorIDScript(DatabaseTest):
             "--vendor-id=LIBR",
             "--node-value=not a hex number",
         ]
-        assert_raises_regexp(
-            ValueError,
-            "invalid literal for int",
-            script.do_run, self._db,
-            cmd_args=cmd_args
-        )
+        with pytest.raises(ValueError) as exc:
+            script.do_run(self._db, cmd_args=cmd_args)
+        assert "invalid literal for int" in exc.value
 
         cmd_args = [
             "--vendor-id=LIBR",
             "--node-value=abce",
             "--delegate=http://random-site/",
         ]
-        assert_raises_regexp(
-            ValueError,
-            "Invalid delegate: http://random-site/",
-            script.do_run, self._db,
-            cmd_args=cmd_args
-        )
+        with pytest.raises(ValueError) as exc:
+            script.do_run(self._db, cmd_args=cmd_args)
+        assert "Invalid delegate: http://random-site/" in exc.value

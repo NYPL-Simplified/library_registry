@@ -1,9 +1,3 @@
-from nose.tools import (
-    assert_raises_regexp,
-    assert_raises,
-    eq_,
-    set_trace,
-)
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm.exc import MultipleResultsFound
@@ -41,6 +35,10 @@ from . import (
 )
 
 
+def eq_(a, b):
+    assert a == b
+
+
 class TestPlace(DatabaseTest):
 
     def test_creation(self):
@@ -52,7 +50,7 @@ class TestPlace(DatabaseTest):
             external_name='New York',
             create_method_kwargs=dict(geometry='SRID=4326;POINT(-75 43)')
         )
-        eq_(True, is_new)
+        assert is_new is True
 
         new_mexico, is_new = get_one_or_create(
             self._db, Place, type=Place.STATE, external_id='21',
@@ -115,14 +113,14 @@ class TestPlace(DatabaseTest):
         m = Place.default_nation
 
         # We start out with no default nation.
-        eq_(None, m(self._db))
+        assert m(self._db) is None
 
         # The abbreviation of the default nation is stored in the
         # DEFAULT_NATION_ABBREVIATION setting.
         setting = ConfigurationSetting.sitewide(
             self._db, Configuration.DEFAULT_NATION_ABBREVIATION
         )
-        eq_(None, setting.value)
+        assert setting.value is None
 
         # Set the default nation to the United States.
         setting.value = self.crude_us.abbreviated_name
@@ -131,7 +129,7 @@ class TestPlace(DatabaseTest):
         # If there's no nation with this abbreviation,
         # there is no default nation.
         setting.value = "LL"
-        eq_(None, m(self._db))
+        assert m(self._db) is None
 
     def test_to_geojson(self):
 
@@ -172,18 +170,18 @@ class TestPlace(DatabaseTest):
             return place2 in qu.all()
 
         # Places that contain each other intersect.
-        eq_(True, s_i(nyc, new_york))
-        eq_(True, s_i(new_york, nyc))
+        assert s_i(nyc, new_york) is True
+        assert s_i(new_york, nyc) is True
 
         # Places that don't share a border don't intersect.
-        eq_(False, s_i(nyc, connecticut))
-        eq_(False, s_i(connecticut, nyc))
+        assert s_i(nyc, connecticut) is False
+        assert s_i(connecticut, nyc) is False
 
         # Connecticut and New York share a border, so PostGIS says they
         # intersect, but they don't "intersect" in the everyday sense,
         # so overlaps_not_counting_border excludes them.
-        eq_(False, s_i(new_york, connecticut))
-        eq_(False, s_i(connecticut, new_york))
+        assert s_i(new_york, connecticut) is False
+        assert s_i(connecticut, new_york) is False
 
     def test_parse_name(self):
         m = Place.parse_name
@@ -298,38 +296,32 @@ class TestPlace(DatabaseTest):
         )
 
         # Neither of these is obviously better.
-        eq_(None, us.lookup_inside("Manhattan"))
-        assert_raises_regexp(
-            MultipleResultsFound,
-            "More than one place called Manhattan inside United States.",
-            us.lookup_inside, "Manhattan", using_overlap=True
-        )
+        assert us.lookup_inside("Manhattan") is None
+        with pytest.raises(MultipleResultsFound) as exc:
+            us.lookup_inside("Manhattan", using_overlap=True)
+        assert "More than one place called Manhattan inside United States." in exc.value
 
         # Now the cases where using_overlap=False performs better.
 
         # "New York, US" is a little ambiguous, but they probably mean
         # the state.
         eq_(new_york, us.lookup_inside("New York"))
-        assert_raises_regexp(
-            MultipleResultsFound,
-            "More than one place called New York inside United States.",
-            us.lookup_inside, "New York", using_overlap=True
-        )
+        with pytest.raises(MultipleResultsFound) as exc:
+            us.lookup_inside("New York", using_overlap=True)
+        assert "More than one place called New York inside United States." in exc.value
 
         # "New York, New York" can only be parsed by parentage.
         eq_(nyc, us.lookup_inside("New York, New York"))
-        assert_raises_regexp(
-            MultipleResultsFound,
-            "More than one place called New York inside United States.",
-            us.lookup_inside, "New York, New York", using_overlap=True
-        )
+        with pytest.raises(MultipleResultsFound) as exc:
+            us.lookup_inside("New York, New York", using_overlap=True)
+        assert "More than one place called New York inside United States." in exc.value
 
         # Using geographic overlap has another problem -- although the
         # name of the method is 'lookup_inside', we're actually
         # checking for _intersection_. Places that overlap are treated
         # as being inside *each other*.
         eq_(nyc, zip_10018.lookup_inside("New York", using_overlap=True))
-        eq_(None, zip_10018.lookup_inside("New York", using_overlap=False))
+        assert zip_10018.lookup_inside("New York", using_overlap=False) is None
 
     def test_lookup_one_through_external_source(self):
         # We're going to find the approximate location of Poughkeepsie
@@ -354,26 +346,25 @@ class TestPlace(DatabaseTest):
 
         # If we ask about a real place but there is no corresponding
         # postal code Place in the database, we get nothing.
-        eq_(None, m("Woodstock"))
+        assert m("Woodstock") is None
 
         # Similarly if we ask about a nonexistent place.
-        eq_(None, m("ZXCVB"))
+        assert m("ZXCVB") is None
 
         # Or if we try to use uszipcode on a place that's not in the US.
         ontario = self._place('35', 'Ontario', Place.STATE,
                               'ON', None, None)
-        eq_(None, ontario.lookup_one_through_external_source('Hamilton'))
+        assert ontario.lookup_one_through_external_source('Hamilton') is None
 
         # Calling this method on a Place that's not a state doesn't
         # make sense (because uszipcode only knows about cities within
         # states), and the result is always None.
-        eq_(None, zip_12601.lookup_one_through_external_source("Poughkeepsie"))
+        assert zip_12601.lookup_one_through_external_source("Poughkeepsie") is None
 
         # lookup_one_through_external_source operates on the same
         # rules as lookup_inside -- the city you're looking up must be
         # geographically inside the Place whose method you're calling.
-        eq_(None,
-            connecticut.lookup_one_through_external_source("Poughkeepsie"))
+        assert connecticut.lookup_one_through_external_source("Poughkeepsie") is None
 
     def test_served_by(self):
         zip = self.zip_10018
@@ -427,13 +418,13 @@ class TestLibrary(DatabaseTest):
                 unicode(e))
 
     def test_for_short_name(self):
-        eq_(None, Library.for_short_name(self._db, 'ABCD'))
+        assert Library.for_short_name(self._db, 'ABCD') is None
         lib = self._library("A Library")
         lib.short_name = 'ABCD'
         eq_(lib, Library.for_short_name(self._db, 'ABCD'))
 
     def test_for_urn(self):
-        eq_(None, Library.for_urn(self._db, 'ABCD'))
+        assert Library.for_urn(self._db, 'ABCD') is None
         lib = self._library()
         eq_(lib, Library.for_urn(self._db, lib.internal_urn))
 
@@ -467,12 +458,9 @@ class TestLibrary(DatabaseTest):
         # 20).
         def theyre_all_duplicates(name):
             return True
-        assert_raises_regexp(
-            ValueError,
-            "Could not generate random short name after 20 attempts!",
-            Library.random_short_name,
-            duplicate_check=theyre_all_duplicates
-        )
+        with pytest.raises(ValueError) as exc:
+            Library.random_short_name(duplicate_check=theyre_all_duplicates)
+        assert "Could not generate random short name after 20 attempts!" in exc.value
 
     def test_set_library_stage(self):
         lib = self._library()
@@ -481,13 +469,13 @@ class TestLibrary(DatabaseTest):
         # take a library from production to non-production.
         def crash():
             lib.library_stage = Library.TESTING_STAGE
-        assert_raises_regexp(
-            ValueError, "This library is already in production", crash
-        )
+        with pytest.raises(ValueError) as exc:
+            crash()
+        assert "This library is already in production" in exc.value
 
         # Have the registry take the library out of production.
         lib.registry_stage = Library.CANCELLED_STAGE
-        eq_(False, lib.in_production)
+        assert lib.in_production is False
 
         # Now we can change the library stage however we want.
         lib.library_stage = Library.TESTING_STAGE
@@ -501,18 +489,18 @@ class TestLibrary(DatabaseTest):
         # production.
         eq_(Library.PRODUCTION_STAGE, lib.library_stage)
         eq_(Library.PRODUCTION_STAGE, lib.registry_stage)
-        eq_(True, lib.in_production)
+        assert lib.in_production is True
 
         # If either library_stage or registry stage is not
         # PRODUCTION_STAGE, we are not in production.
         lib.registry_stage = Library.CANCELLED_STAGE
-        eq_(False, lib.in_production)
+        assert lib.in_production is False
 
         lib.library_stage = Library.CANCELLED_STAGE
-        eq_(False, lib.in_production)
+        assert lib.in_production is False
 
         lib.registry_stage = Library.PRODUCTION_STAGE
-        eq_(False, lib.in_production)
+        assert lib.in_production is False
 
     def test_number_of_patrons(self):
         production_library = self._library()
@@ -573,20 +561,18 @@ class TestLibrary(DatabaseTest):
     def test_set_hyperlink(self):
         library = self._library()
 
-        assert_raises_regexp(
-            ValueError, "No Hyperlink hrefs were specified",
-            library.set_hyperlink, "rel"
-        )
+        with pytest.raises(ValueError) as exc:
+            library.set_hyperlink("rel")
+        assert "No Hyperlink hrefs were specified" in exc.value
 
-        assert_raises_regexp(
-            ValueError, "No link relation was specified",
-            library.set_hyperlink, None, ["href"]
-        )
+        with pytest.raises(ValueError) as exc:
+            library.set_hyperlink(None, ["href"])
+        assert "No link relation was specified" in exc.value
 
         link, is_modified = library.set_hyperlink("rel", "href1", "href2")
         eq_("rel", link.rel)
         eq_("href1", link.href)
-        eq_(True, is_modified)
+        assert is_modified is True
 
         # Calling set_hyperlink again does not modify the link
         # so long as the old href is still a possibility.
@@ -594,7 +580,7 @@ class TestLibrary(DatabaseTest):
         eq_(link2, link)
         eq_("rel", link2.rel)
         eq_("href1", link2.href)
-        eq_(False, is_modified)
+        assert is_modified is False
 
         # If there is no way to keep a Hyperlink's href intact,
         # set_hyperlink will modify it.
@@ -602,7 +588,7 @@ class TestLibrary(DatabaseTest):
         eq_(link3, link)
         eq_("rel", link3.rel)
         eq_("href2", link3.href)
-        eq_(True, is_modified)
+        assert is_modified is True
 
         # Under no circumstances will two hyperlinks for the same rel be
         # created for a given library.
@@ -612,13 +598,13 @@ class TestLibrary(DatabaseTest):
         # Resource using different rels.
         link4, modified = library.set_hyperlink("rel2", "href2")
         eq_(link4.resource, link3.resource)
-        eq_(True, modified)
+        assert modified is True
 
         # And two libraries can link to the same Resource using the same
         # rel.
         library2 = self._library()
         link5, modified = library2.set_hyperlink("rel2", "href2")
-        eq_(True, modified)
+        assert modified is True
         eq_(library2, link5.library)
         eq_(link4.resource, link5.resource)
 
@@ -982,10 +968,10 @@ class TestLibrary(DatabaseTest):
         # US ZIP codes are recognized as postal codes.
         eq_("93203", m("93203"))
         eq_("93203", m("93203-1234"))
-        eq_(None, m("the library"))
+        assert m("the library") is None
 
         # A UK post code is not currently recognized.
-        eq_(None, m("AB1 0AA"))
+        assert m("AB1 0AA") is None
 
     def test_query_parts(self):
         m = Library.query_parts
@@ -1224,34 +1210,27 @@ class TestCollectionSummary(DatabaseTest):
     def test_unrecognized_language_is_set_as_unknown(self):
         library = self._library()
         summary = CollectionSummary.set(library, "mmmmmm", 100)
-        eq_(None, summary.language)
+        assert summary.language is None
         eq_(100, summary.size)
 
     def test_size_must_be_integerable(self):
         library  = self._library()
-        assert_raises_regexp(
-            ValueError,
-            "invalid literal for.*",
-            CollectionSummary.set, library, "eng",
-            "fruit"
-        )
+        with pytest.raises(ValueError) as exc:
+            CollectionSummary.set(library, "eng", "fruit")
+        assert "invalid literal for" in exc.value
 
     def test_negative_size_is_not_allowed(self):
         library  = self._library()
-        assert_raises_regexp(
-            ValueError, "Collection size cannot be negative.",
-            CollectionSummary.set, library, "eng", "-1"
-        )
+        with pytest.raises(ValueError) as exc:
+            CollectionSummary.set(library, "eng", "-1")
+        assert "Collection size cannot be negative." in exc.value
+
 
 class TestAudience(DatabaseTest):
     def test_unrecognized_audience(self):
-        assert_raises_regexp(
-            ValueError,
-            "Unknown audience: no such audience",
-            Audience.lookup,
-            self._db,
-            "no such audience"
-        )
+        with pytest.raises(ValueError) as exc:
+            Audience.lookup(self._db, "no such audience")
+        assert "Unknown audience: no such audience" in exc.value
 
 
 class TestDelegatedPatronIdentifier(DatabaseTest):
@@ -1266,7 +1245,7 @@ class TestDelegatedPatronIdentifier(DatabaseTest):
             self._db, library, patron_identifier, identifier_type,
             make_id
         )
-        eq_(True, is_new)
+        assert is_new is True
         eq_(library, identifier.library)
         eq_(patron_identifier, identifier.patron_identifier)
         # id_1() was called.
@@ -1280,7 +1259,7 @@ class TestDelegatedPatronIdentifier(DatabaseTest):
             self._db, library, patron_identifier, identifier_type, explode
         )
         # The existing identifier was looked up.
-        eq_(False, is_new)
+        assert is_new is False
         eq_(identifier2.id, identifier.id)
         # id_2() was not called.
         eq_("id1", identifier2.delegated_identifier)
@@ -1338,24 +1317,22 @@ class TestConfigurationSetting(DatabaseTest):
         and some are not.
         """
         m = ConfigurationSetting._is_secret
-        eq_(True, m('secret'))
-        eq_(True, m('password'))
-        eq_(True, m('its_a_secret_to_everybody'))
-        eq_(True, m('the_password'))
-        eq_(True, m('password_for_the_account'))
-        eq_(False, m('public_information'))
+        assert m('secret') is True
+        assert m('password') is True
+        assert m('its_a_secret_to_everybody') is True
+        assert m('the_password') is True
+        assert m('password_for_the_account') is True
+        assert m('public_information') is False
 
-        eq_(True,
-            ConfigurationSetting.sitewide(self._db, "secret_key").is_secret)
-        eq_(False,
-            ConfigurationSetting.sitewide(self._db, "public_key").is_secret)
+        assert ConfigurationSetting.sitewide(self._db, "secret_key").is_secret is True
+        assert ConfigurationSetting.sitewide(self._db, "public_key").is_secret is False
 
     def test_value_or_default(self):
         integration, ignore = create(
             self._db, ExternalIntegration, goal=self._str, protocol=self._str
         )
         setting = integration.setting("key")
-        eq_(None, setting.value)
+        assert setting.value is None
 
         # If the setting has no value, value_or_default sets the value to
         # the default, and returns the default.
@@ -1378,7 +1355,7 @@ class TestConfigurationSetting(DatabaseTest):
         sitewide_conf = ConfigurationSetting.sitewide(self._db, key)
 
         # Its value is not set.
-        eq_(None, sitewide_conf.value)
+        assert sitewide_conf.value is None
 
         # Set it.
         sitewide_conf.value = "Sitewide value"
@@ -1397,7 +1374,7 @@ class TestConfigurationSetting(DatabaseTest):
         # But because the meaning of a configuration key differ so
         # widely across integrations, the Adobe integration does not
         # inherit the sitewide value for the key.
-        eq_(None, adobe_conf.value)
+        assert adobe_conf.value is None
         adobe_conf.value = "Adobe value"
 
         # Here's a library which has a ConfigurationSetting for the same
@@ -1425,7 +1402,7 @@ class TestConfigurationSetting(DatabaseTest):
         library_patron_prefix_conf = ConfigurationSetting.for_library_and_externalintegration(
             self._db, key, library, adobe
         )
-        eq_(None, library_patron_prefix_conf.value)
+        assert library_patron_prefix_conf.value is None
 
         # If the integration has a value set for this
         # ConfigurationSetting, that value is inherited for every
@@ -1433,7 +1410,7 @@ class TestConfigurationSetting(DatabaseTest):
         generic_patron_prefix_conf = ConfigurationSetting.for_externalintegration(
             key, adobe
         )
-        eq_(None, generic_patron_prefix_conf.value)
+        assert generic_patron_prefix_conf.value is None
         generic_patron_prefix_conf.value = "Integration-specific value"
         eq_("Integration-specific value", library_patron_prefix_conf.value)
 
@@ -1466,45 +1443,44 @@ class TestConfigurationSetting(DatabaseTest):
             self._db, key, library, integration
         )
         eq_(setting, setting2)
-        assert_raises(
-            IntegrityError,
-            create, self._db, ConfigurationSetting,
-            key=key,
-            library_id=library.id, external_integration=integration
-        )
+        with pytest.raises(IntegrityError):
+            create(self._db, ConfigurationSetting, key=key, library_id=library.id, external_integration=integration)
         # We really screwed up the database session there -- roll it back
         # so that test cleanup can proceed.
         self._db.rollback()
 
     def test_int_value(self):
         number = ConfigurationSetting.sitewide(self._db, "number")
-        eq_(None, number.int_value)
+        assert number.int_value is None
 
         number.value = "1234"
         eq_(1234, number.int_value)
 
         number.value = "tra la la"
-        assert_raises(ValueError, lambda: number.int_value)
+        with pytest.raises(ValueError):
+            number.int_value
 
     def test_float_value(self):
         number = ConfigurationSetting.sitewide(self._db, "number")
-        eq_(None, number.int_value)
+        assert number.int_value is None
 
         number.value = "1234.5"
         eq_(1234.5, number.float_value)
 
         number.value = "tra la la"
-        assert_raises(ValueError, lambda: number.float_value)
+        with pytest.raises(ValueError):
+            number.float_value
 
     def test_json_value(self):
         jsondata = ConfigurationSetting.sitewide(self._db, "json")
-        eq_(None, jsondata.int_value)
+        assert jsondata.int_value is None
 
         jsondata.value = "[1,2]"
         eq_([1,2], jsondata.json_value)
 
         jsondata.value = "tra la la"
-        assert_raises(ValueError, lambda: jsondata.json_value)
+        with pytest.raises(ValueError):
+            jsondata.json_value
 
     def test_explain(self):
         """Test that ConfigurationSetting.explain gives information
@@ -1662,7 +1638,7 @@ class TestValidation(DatabaseTest):
         # Instead of a new Validation being created, the earlier
         # Validation has been invalidated.
         eq_(email_validation, email_validation_2)
-        eq_(False, email_validation_2.success)
+        assert email_validation_2.success is False
 
         # The secret has changed.
         assert old_secret != email_validation.secret
@@ -1670,32 +1646,31 @@ class TestValidation(DatabaseTest):
     def test_mark_as_successful(self):
 
         validation, ignore = create(self._db, Validation)
-        eq_(True, validation.active)
-        eq_(False, validation.success)
+        assert validation.active is True
+        assert validation.success is False
         assert validation.secret is not None
 
         validation.mark_as_successful()
-        eq_(False, validation.active)
-        eq_(True, validation.success)
-        eq_(None, validation.secret)
+        assert validation.active is False
+        assert validation.success is True
+        assert validation.secret is None
 
         # A validation that has already succeeded cannot be marked
         # as successful.
-        assert_raises_regexp(
-            Exception, "This validation has already succeeded",
+        with pytest.raises(Exception) as exc:
             validation.mark_as_successful
-        )
+        assert "This validation has already succeeded" in exc.value
 
         # A validation that has expired cannot be marked as successful.
         validation.restart()
         validation.started_at = (
             datetime.datetime.utcnow() - datetime.timedelta(days=7)
         )
-        eq_(False, validation.active)
-        assert_raises_regexp(
-            Exception, "This validation has expired",
+        assert validation.active is False
+        with pytest.raises(Exception) as exc):
             validation.mark_as_successful
-        )
+        assert "This validation has expired" in exc.value
+
 
 class TestAdmin(DatabaseTest):
     def setup(self):
@@ -1713,7 +1688,7 @@ class TestAdmin(DatabaseTest):
         # Successfully authenticate existing admin
         eq_(self.admin, Admin.authenticate(self._db, "Admin", "123"))
         # Unsuccessfully authenticate existing admin
-        eq_(None, Admin.authenticate(self._db, "Admin", "wrong"))
+        assert Admin.authenticate(self._db, "Admin", "wrong") is None
 
     def test_make_new_admin(self):
         # Create the first admin

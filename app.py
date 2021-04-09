@@ -11,7 +11,7 @@ from config import Configuration
 from controller import LibraryRegistry
 from log import LogConfiguration
 from model import SessionManager, ConfigurationSetting
-from nose.tools import set_trace
+
 from util.app_server import returns_problem_detail, returns_json_or_response_or_problem_detail
 from app_helpers import (
     compressible,

@@ -3,7 +3,7 @@ import feedparser
 from flask_babel import lazy_gettext as _
 import json
 import logging
-from nose.tools import set_trace
+
 from PIL import Image
 from io import BytesIO
 from urlparse import urljoin

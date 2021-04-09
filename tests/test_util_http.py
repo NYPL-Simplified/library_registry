@@ -1,5 +1,8 @@
 import requests
 import json
+
+import pytest
+
 from util.http import (
     HTTP,
     BadResponseException,
@@ -7,12 +10,12 @@ from util.http import (
     RequestNetworkException,
     RequestTimedOut,
 )
-from nose.tools import (
-    assert_raises_regexp,
-    eq_,
-    set_trace
-)
 from testing import MockRequestsResponse
+
+
+def eq_(a, b):
+    assert a == b
+
 
 class TestHTTP(object):
 
@@ -32,36 +35,27 @@ class TestHTTP(object):
         def immediately_timeout(*args, **kwargs):
             raise requests.exceptions.Timeout("I give up")
 
-        assert_raises_regexp(
-            RequestTimedOut,
-            "Timeout accessing http://url/: I give up",
-            HTTP._request_with_timeout, "http://url/", immediately_timeout,
-            "a", "b"
-        )
+        with pytest.raises(RequestTimedOut) as exc:
+            HTTP._request_with_timeout("http://url/", immediately_timeout, "a", "b")
+        assert "Timeout accessing http://url/: I give up" in exc.value
 
     def test_request_with_network_failure(self):
 
         def immediately_fail(*args, **kwargs):
             raise requests.exceptions.ConnectionError("a disaster")
 
-        assert_raises_regexp(
-            RequestNetworkException,
-            "Network error contacting http://url/: a disaster",
-            HTTP._request_with_timeout, "http://url/", immediately_fail,
-            "a", "b"
-        )
+        with pytest.raises(RequestNetworkException) as exc:
+            HTTP._request_with_timeout("http://url/", immediately_fail, "a", "b")
+        assert "Network error contacting http://url/: a disaster" in exc.value
 
     def test_request_with_response_indicative_of_failure(self):
 
         def fake_500_response(*args, **kwargs):
             return MockRequestsResponse(500, content="Failure!")
 
-        assert_raises_regexp(
-            BadResponseException,
-            "Bad response from http://url/: Got status code 500 from external server.",
-            HTTP._request_with_timeout, "http://url/", fake_500_response,
-            "a", "b"
-        )
+        with pytest.raises(BadResponseException) as exc:
+            HTTP._request_with_timeout("http://url/", fake_500_response, "a", "b")
+        assert "Bad response from http://url/: Got status code 500 from external server." in exc.value
 
     def test_allowed_response_codes(self):
         # Test our ability to raise BadResponseException when
@@ -82,39 +76,27 @@ class TestHTTP(object):
 
         # You can say that certain codes are specifically allowed, and
         # all others are forbidden.
-        assert_raises_regexp(
-            BadResponseException,
-            "Bad response.*Got status code 401 from external server, but can only continue on: 200, 201.",
-            m, url, fake_401_response,
-            allowed_response_codes=[201, 200]
-        )
+        with pytest.raises(BadResponseException) as exc:
+            m(url, fake_401_response, allowed_response_codes=[201, 200])
+        assert "Bad response.*Got status code 401 from external server, but can only continue on: 200, 201." in exc.value
 
         response = m(url, fake_401_response, allowed_response_codes=[401])
         response = m(url, fake_401_response, allowed_response_codes=["4xx"])
 
         # In this way you can even raise an exception on a 200 response code.
-        assert_raises_regexp(
-            BadResponseException,
-            "Bad response.*Got status code 200 from external server, but can only continue on: 401.",
-            m, url, fake_200_response,
-            allowed_response_codes=[401]
-        )
+        with pytest.raises(BadResponseException) as exc:
+            m(url, fake_200_response, allowed_response_codes=[401])
+        assert "Bad response.*Got status code 200 from external server, but can only continue on: 401." in exc.value
 
         # You can say that certain codes are explicitly forbidden, and
         # all others are allowed.
-        assert_raises_regexp(
-            BadResponseException,
-            "Bad response.*Got status code 401 from external server, cannot continue.",
-            m, url, fake_401_response,
-            disallowed_response_codes=[401]
-        )
+        with pytest.raises(BadResponseException) as exc:
+            m(url, fake_401_response, disallowed_response_codes=[401])
+        assert "Bad response.*Got status code 401 from external server, cannot continue." in exc.value
 
-        assert_raises_regexp(
-            BadResponseException,
-            "Bad response.*Got status code 200 from external server, cannot continue.",
-            m, url, fake_200_response,
-            disallowed_response_codes=["2xx", 301]
-        )
+        with pytest.raises(BadResponseException) as exc:
+            m(url, fake_200_response, disallowed_response_codes=["2xx", 301])
+        assert "Bad response.*Got status code 200 from external server, cannot continue." in exc.value
 
         response = m(url, fake_401_response,
                      disallowed_response_codes=["2xx"])
@@ -143,7 +125,7 @@ class TestHTTP(object):
         no_debug_doc = exception.as_problem_detail_document(debug=False)
         eq_("Bad response", no_debug_doc.title)
         eq_('The server made a request to url, and got an unexpected or invalid response.', no_debug_doc.detail)
-        eq_(None, no_debug_doc.debug_message)
+        assert no_debug_doc.debug_message is None
 
     def test_unicode_converted_to_utf8(self):
         """Any Unicode that sneaks into the URL, headers or body is

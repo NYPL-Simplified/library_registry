@@ -1,10 +1,6 @@
 import logging
-from nose.tools import (
-    assert_raises,
-    assert_raises_regexp,
-    eq_,
-    set_trace
-)
+
+import pytest
 
 from . import DatabaseTest
 from log import (
@@ -16,6 +12,10 @@ from log import (
 from model import (
     ExternalIntegration,
 )
+
+def eq_(a, b):
+    assert a == b
+    
 
 class TestLogConfiguration(DatabaseTest):
 
@@ -167,6 +167,9 @@ class TestLogConfiguration(DatabaseTest):
 
         # Anything that doesn't fall under one of these cases will raise an
         # exception.
-        assert_raises(TypeError, m, "http://%s/%s", "token")
-        assert_raises(KeyError, m, "http://%(atoken)s/", "token")
+        with pytest.raises(TypeError):
+            m("http://%s/%s", "token")
+
+        with pytest.raises(KeyError):
+            m("http://%(atoken)s/", "token")
 
