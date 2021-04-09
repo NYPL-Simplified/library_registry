@@ -284,7 +284,7 @@ class TestVendorIDModel(VendorIDTest):
             self.library.shared_secret + "bad",
             "patron alias"
         )
-        assert (self.model.authdata_lookup, bad_signature) == (None, None)
+        assert self.model.authdata_lookup(bad_signature) == (None, None)
 
 
     def test_delegation_standard_lookup(self):

@@ -7,6 +7,8 @@ import json
 import operator
 import random
 
+import pytest
+
 from config import Configuration
 from emailer import Emailer
 from model import (
@@ -80,7 +82,7 @@ class TestPlace(DatabaseTest):
 
         # Query the database to find states ordered by distance from
         # Lake Placid.
-        distance = func.ST_Distance_Sphere(
+        distance = func.ST_DistanceSphere(
             lake_placid.geometry, Place.geometry
         )
         places = self._db.query(Place).filter(
@@ -299,7 +301,7 @@ class TestPlace(DatabaseTest):
         assert us.lookup_inside("Manhattan") is None
         with pytest.raises(MultipleResultsFound) as exc:
             us.lookup_inside("Manhattan", using_overlap=True)
-        assert "More than one place called Manhattan inside United States." in exc.value
+        assert "More than one place called Manhattan inside United States." in str(exc.value)
 
         # Now the cases where using_overlap=False performs better.
 
@@ -308,13 +310,13 @@ class TestPlace(DatabaseTest):
         eq_(new_york, us.lookup_inside("New York"))
         with pytest.raises(MultipleResultsFound) as exc:
             us.lookup_inside("New York", using_overlap=True)
-        assert "More than one place called New York inside United States." in exc.value
+        assert "More than one place called New York inside United States." in str(exc.value)
 
         # "New York, New York" can only be parsed by parentage.
         eq_(nyc, us.lookup_inside("New York, New York"))
         with pytest.raises(MultipleResultsFound) as exc:
             us.lookup_inside("New York, New York", using_overlap=True)
-        assert "More than one place called New York inside United States." in exc.value
+        assert "More than one place called New York inside United States." in str(exc.value)
 
         # Using geographic overlap has another problem -- although the
         # name of the method is 'lookup_inside', we're actually
@@ -413,9 +415,9 @@ class TestLibrary(DatabaseTest):
         try:
             lib.short_name = 'ab|cd'
             raise Error("Expected exception not raised.")
-        except ValueError, e:
+        except ValueError as e:
             eq_('Short name cannot contain the pipe character.',
-                unicode(e))
+                str(e))
 
     def test_for_short_name(self):
         assert Library.for_short_name(self._db, 'ABCD') is None
@@ -433,8 +435,7 @@ class TestLibrary(DatabaseTest):
         random.seed(42)
         name = Library.random_short_name()
 
-        # TODO PYTHON3 expect = "UDAXIH"
-        expect = 'QAHFTR'
+        expect = 'UDAXIH'
         eq_(expect, name)
 
         # Reset the random seed so the same name will be generated again.
@@ -449,8 +450,7 @@ class TestLibrary(DatabaseTest):
         # duplicate, so it tries again and generates a new string
         # which passes the already_used test.
 
-        # TODO PYTHON3 expect_next = "HEXDVX"
-        expect_next = "XCKAFN"
+        expect_next = "HEXDVX"
         eq_(expect_next, name)
 
         # To avoid an infinite loop, we will stop trying and raise an
@@ -460,7 +460,7 @@ class TestLibrary(DatabaseTest):
             return True
         with pytest.raises(ValueError) as exc:
             Library.random_short_name(duplicate_check=theyre_all_duplicates)
-        assert "Could not generate random short name after 20 attempts!" in exc.value
+        assert "Could not generate random short name after 20 attempts!" in str(exc.value)
 
     def test_set_library_stage(self):
         lib = self._library()
@@ -471,7 +471,7 @@ class TestLibrary(DatabaseTest):
             lib.library_stage = Library.TESTING_STAGE
         with pytest.raises(ValueError) as exc:
             crash()
-        assert "This library is already in production" in exc.value
+        assert "This library is already in production" in str(exc.value)
 
         # Have the registry take the library out of production.
         lib.registry_stage = Library.CANCELLED_STAGE
@@ -563,11 +563,11 @@ class TestLibrary(DatabaseTest):
 
         with pytest.raises(ValueError) as exc:
             library.set_hyperlink("rel")
-        assert "No Hyperlink hrefs were specified" in exc.value
+        assert "No Hyperlink hrefs were specified" in str(exc.value)
 
         with pytest.raises(ValueError) as exc:
             library.set_hyperlink(None, ["href"])
-        assert "No link relation was specified" in exc.value
+        assert "No link relation was specified" in str(exc.value)
 
         link, is_modified = library.set_hyperlink("rel", "href1", "href2")
         eq_("rel", link.rel)
@@ -1217,20 +1217,20 @@ class TestCollectionSummary(DatabaseTest):
         library  = self._library()
         with pytest.raises(ValueError) as exc:
             CollectionSummary.set(library, "eng", "fruit")
-        assert "invalid literal for" in exc.value
+        assert "invalid literal for" in str(exc.value)
 
     def test_negative_size_is_not_allowed(self):
         library  = self._library()
         with pytest.raises(ValueError) as exc:
             CollectionSummary.set(library, "eng", "-1")
-        assert "Collection size cannot be negative." in exc.value
+        assert "Collection size cannot be negative." in str(exc.value)
 
 
 class TestAudience(DatabaseTest):
     def test_unrecognized_audience(self):
         with pytest.raises(ValueError) as exc:
             Audience.lookup(self._db, "no such audience")
-        assert "Unknown audience: no such audience" in exc.value
+        assert "Unknown audience: no such audience" in str(exc.value)
 
 
 class TestDelegatedPatronIdentifier(DatabaseTest):
@@ -1483,28 +1483,26 @@ class TestConfigurationSetting(DatabaseTest):
             jsondata.json_value
 
     def test_explain(self):
-        """Test that ConfigurationSetting.explain gives information
-        about all site-wide configuration settings.
-        """
-        ConfigurationSetting.sitewide(self._db, "a_secret").value = "1"
-        ConfigurationSetting.sitewide(self._db, "nonsecret_setting").value = "2"
-
         integration, ignore = create(
             self._db, ExternalIntegration,
-            protocol="a protocol", goal="a goal")
+            protocol="protocol", goal="goal"
+        )
+        integration.name = "The Integration"
+        integration.setting("somesetting").value = "somevalue"
+        integration.setting("password").value = "somepass"
 
-        actual = ConfigurationSetting.explain(self._db, include_secrets=True)
-        expect = """Site-wide configuration settings:
----------------------------------
-a_secret='1'
-nonsecret_setting='2'"""
-        eq_(expect, "\n".join(actual))
+        expect = (
+            "ID: %s\n"
+            "Name: The Integration\n"
+            "Protocol/Goal: protocol/goal\n"
+            "somesetting='somevalue'"
+        )
+        actual = integration.explain()
+        assert "\n".join(actual) == expect % integration.id
 
-        without_secrets = "\n".join(ConfigurationSetting.explain(
-            self._db, include_secrets=False
-        ))
-        assert 'a_secret' not in without_secrets
-        assert 'nonsecret_setting' in without_secrets
+        # If we pass in True for include_secrets, we see the passwords.
+        with_secrets = integration.explain(include_secrets=True)
+        assert "password='somepass'" in with_secrets
 
 
 class TestHyperlink(DatabaseTest):
@@ -1658,8 +1656,8 @@ class TestValidation(DatabaseTest):
         # A validation that has already succeeded cannot be marked
         # as successful.
         with pytest.raises(Exception) as exc:
-            validation.mark_as_successful
-        assert "This validation has already succeeded" in exc.value
+            validation.mark_as_successful()
+        assert "This validation has already succeeded" in str(exc.value)
 
         # A validation that has expired cannot be marked as successful.
         validation.restart()
@@ -1667,9 +1665,9 @@ class TestValidation(DatabaseTest):
             datetime.datetime.utcnow() - datetime.timedelta(days=7)
         )
         assert validation.active is False
-        with pytest.raises(Exception) as exc):
-            validation.mark_as_successful
-        assert "This validation has expired" in exc.value
+        with pytest.raises(Exception) as exc:
+            validation.mark_as_successful()
+        assert "This validation has expired" in str(exc.value)
 
 
 class TestAdmin(DatabaseTest):

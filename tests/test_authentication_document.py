@@ -441,7 +441,7 @@ class TestUpdateServiceAreas(DatabaseTest):
         # We got a ProblemDetail explaining the problem
         assert isinstance(problem, ProblemDetail)
         assert problem.uri == INVALID_INTEGRATION_DOCUMENT.uri
-        assert problem.detail == 'The following service area was unknown: ["Unknown 1", "Unknown 2"]. The following service area was ambiguous: ["Ambiguous"].',
+        assert problem.detail == 'The following service area was unknown: ["Unknown 1", "Unknown 2"]. The following service area was ambiguous: ["Ambiguous"].'
 
         # No IDs were added to the list.
         assert ids == []
@@ -633,7 +633,7 @@ class TestUpdateCollectionSize(DatabaseTest):
 
         # Two CollectionSummaries have been created, for the English
         # collection and the (empty) Japanese collection.
-        assert [(u'eng', 100), (u'jpn', 0)] == sorted([(x.language, x.size) for x in self.library.collections])
+        assert [('eng', 100), ('jpn', 0)] == sorted([(x.language, x.size) for x in self.library.collections])
 
         # Update the library with new data.
         self.update({"eng": "200"})
@@ -645,7 +645,7 @@ class TestUpdateCollectionSize(DatabaseTest):
 
         self.update(None)
         # Now both collections have been removed.
-        assert self.library.collections []
+        assert self.library.collections == []
 
     def test_single_collection(self):
         # Register a single collection not differentiated by language.

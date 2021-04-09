@@ -37,7 +37,7 @@ class TestHTTP(object):
 
         with pytest.raises(RequestTimedOut) as exc:
             HTTP._request_with_timeout("http://url/", immediately_timeout, "a", "b")
-        assert "Timeout accessing http://url/: I give up" in exc.value
+        assert "Timeout accessing http://url/: I give up" in str(exc.value)
 
     def test_request_with_network_failure(self):
 
@@ -46,7 +46,7 @@ class TestHTTP(object):
 
         with pytest.raises(RequestNetworkException) as exc:
             HTTP._request_with_timeout("http://url/", immediately_fail, "a", "b")
-        assert "Network error contacting http://url/: a disaster" in exc.value
+        assert "Network error contacting http://url/: a disaster" in str(exc.value)
 
     def test_request_with_response_indicative_of_failure(self):
 
@@ -55,7 +55,7 @@ class TestHTTP(object):
 
         with pytest.raises(BadResponseException) as exc:
             HTTP._request_with_timeout("http://url/", fake_500_response, "a", "b")
-        assert "Bad response from http://url/: Got status code 500 from external server." in exc.value
+        assert r"Bad response from http://url/: Got status code 500 from external server, cannot continue." in str(exc.value)
 
     def test_allowed_response_codes(self):
         # Test our ability to raise BadResponseException when
@@ -78,7 +78,8 @@ class TestHTTP(object):
         # all others are forbidden.
         with pytest.raises(BadResponseException) as exc:
             m(url, fake_401_response, allowed_response_codes=[201, 200])
-        assert "Bad response.*Got status code 401 from external server, but can only continue on: 200, 201." in exc.value
+        assert "Bad response" in str(exc.value)
+        assert "Got status code 401 from external server, but can only continue on: 200, 201." in str(exc.value)
 
         response = m(url, fake_401_response, allowed_response_codes=[401])
         response = m(url, fake_401_response, allowed_response_codes=["4xx"])
@@ -86,17 +87,17 @@ class TestHTTP(object):
         # In this way you can even raise an exception on a 200 response code.
         with pytest.raises(BadResponseException) as exc:
             m(url, fake_200_response, allowed_response_codes=[401])
-        assert "Bad response.*Got status code 200 from external server, but can only continue on: 401." in exc.value
+        assert "Got status code 200 from external server, but can only continue on: 401." in str(exc.value)
 
         # You can say that certain codes are explicitly forbidden, and
         # all others are allowed.
         with pytest.raises(BadResponseException) as exc:
             m(url, fake_401_response, disallowed_response_codes=[401])
-        assert "Bad response.*Got status code 401 from external server, cannot continue." in exc.value
+        assert "Got status code 401 from external server, cannot continue." in str(exc.value)
 
         with pytest.raises(BadResponseException) as exc:
             m(url, fake_200_response, disallowed_response_codes=["2xx", 301])
-        assert "Bad response.*Got status code 200 from external server, cannot continue." in exc.value
+        assert "Got status code 200 from external server, cannot continue." in str(exc.value)
 
         response = m(url, fake_401_response,
                      disallowed_response_codes=["2xx"])
@@ -107,7 +108,7 @@ class TestHTTP(object):
         try:
             m(url, fake_200_response,
               disallowed_response_codes=["2xx"])
-        except Exception, e:
+        except Exception as e:
             exception = e
         assert exception is not None
 
@@ -143,8 +144,8 @@ class TestHTTP(object):
         url = "http://foo"
         response = HTTP._request_with_timeout(
             url, generator.response, url, "POST",
-            headers = { u"unicode header": u"unicode value"},
-            data=u"unicode data"
+            headers = { "unicode header": "unicode value"},
+            data="unicode data"
         )
         [(args, kwargs)] = generator.requests
         url, method = args
@@ -153,7 +154,7 @@ class TestHTTP(object):
 
         # All the Unicode data was converted to bytes before being sent
         # "over the wire".
-        for k,v in headers.items():
+        for k,v in list(headers.items()):
             assert isinstance(k, bytes)
             assert isinstance(v, bytes)
         assert isinstance(data, bytes)
@@ -166,8 +167,8 @@ class TestRemoteIntegrationException(object):
         name.
         """
         exc = RemoteIntegrationException(
-            u"Unreliable Service",
-            u"I just can't handle your request right now."
+            "Unreliable Service",
+            "I just can't handle your request right now."
         )
 
         # Since only the service name is provided, there are no details to
@@ -176,7 +177,7 @@ class TestRemoteIntegrationException(object):
         other_detail = exc.document_detail(debug=False)
         eq_(debug_detail, other_detail)
 
-        eq_(u'The server tried to access Unreliable Service but the third-party service experienced an error.',
+        eq_('The server tried to access Unreliable Service but the third-party service experienced an error.',
             debug_detail
         )
 
@@ -196,7 +197,7 @@ class TestBadResponseException(object):
         eq_('Bad response', doc['title'])
         eq_('The server made a request to http://url/, and got an unexpected or invalid response.', doc['detail'])
         eq_(
-            u'Bad response from http://url/: Terrible response, just terrible\n\nStatus code: 102\nContent: nonsense',
+            'Bad response from http://url/: Terrible response, just terrible\n\nStatus code: 102\nContent: nonsense',
             doc['debug_message']
         )
 

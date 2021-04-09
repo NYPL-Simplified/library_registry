@@ -34,7 +34,7 @@ class TestShortClientTokenEncoder(object):
         # newline stripped.
         eq_(
             encoded.replace(b":", b"+").replace(b";", b"/").replace(b"@", b"=") + b"\n",
-            base64.encodestring(value)
+            base64.encodebytes(value)
         )
 
         # We can reverse the encoding to get the original value.
@@ -61,20 +61,20 @@ class TestShortClientTokenEncoder(object):
         error = "Both library short name and secret must be specified."
         with pytest.raises(ValueError) as exc:
             self.encoder.encode(None, None, None)
-        assert error in exc.value
+        assert error in str(exc.value)
 
         with pytest.raises(ValueError) as exc:
             self.encoder.encode("A", None, None)
-        assert error in exc.value
+        assert error in str(exc.value)
         
         with pytest.raises(ValueError) as exc:
             self.encoder.encode(None, "A", None)
-        assert error in exc.value
+        assert error in str(exc.value)
 
     def test_cannot_encode_null_patron_identifier(self):
         with pytest.raises(ValueError) as exc:
             self.encoder.encode("lib", "My library secret", None)
-        assert "No patron identifier specified" in exc.value
+        assert "No patron identifier specified" in str(exc.value)
 
     def test_short_client_token_encode_known_value(self):
         """Verify that the encoding algorithm gives a known value on known
@@ -158,36 +158,36 @@ class TestShortClientTokenDecoder(DatabaseTest):
 
         with pytest.raises(ValueError) as exc:
             self.decoder.decode(self._db, "")
-        assert 'Cannot decode an empty token.' in exc.value
+        assert 'Cannot decode an empty token.' in str(exc.value)
 
         with pytest.raises(ValueError) as exc:
             self.decoder.decode(self._db, "no pipes")
-        assert 'Supposed client token "no pipes" does not contain a pipe.' in exc.value
+        assert 'Supposed client token "no pipes" does not contain a pipe.' in str(exc.value)
 
         # A token has to contain at least two pipe characters.
         with pytest.raises(ValueError) as exc:
             m(self._db, "foo|", "signature")
-        assert "Invalid client token" in exc.value
+        assert "Invalid client token" in str(exc.value)
         
         # The expiration time must be numeric.
         with pytest.raises(ValueError) as exc:
             m(self._db, "library|a time|patron", "signature")
-        assert 'Expiration time "a time" is not numeric' in exc.value
+        assert 'Expiration time "a time" is not numeric' in str(exc.value)
 
         # The patron identifier must not be blank.
         with pytest.raises(ValueError) as exc:
             m(self._db, "library|1234|", "signature")
-        assert 'Token library\|1234\| has empty patron identifier' in exc.value
+        assert r'Token library|1234| has empty patron identifier' in str(exc.value)
 
         # The library must be a known one.
         with pytest.raises(ValueError) as exc:
             m(self._db, "unknown|1234|patron", "signature")
-        assert 'I don\'t know how to handle tokens from library "UNKNOWN"' in exc.value
+        assert 'I don\'t know how to handle tokens from library "UNKNOWN"' in str(exc.value)
 
         # The token must not have expired.
         with pytest.raises(ValueError) as exc:
             m(self._db, "library|1234|patron", "signature")
-        assert 'Token library\|1234\|patron expired at 2017-01-01 20:34:00' in exc.value
+        assert r'Token library|1234|patron expired at 2017-01-01 20:34:00' in str(exc.value)
 
         # (Even though the expiration number here is much higher, this
         # token is also expired, because the expiration date
@@ -196,12 +196,12 @@ class TestShortClientTokenDecoder(DatabaseTest):
         # than minutes.)
         with pytest.raises(ValueError) as exc:
             m(self._db, "library|1500000000|patron", "signature")
-        assert 'Token library\|1500000000\|patron expired at 2017-07-14 02:40:00' in exc.value
+        assert r'Token library|1500000000|patron expired at 2017-07-14 02:40:00' in str(exc.value)
 
         # Finally, the signature must be valid.
         with pytest.raises(ValueError) as exc:
             m(self._db, "library|99999999999|patron", "signature")
-        assert 'Invalid signature for' in exc.value
+        assert 'Invalid signature for' in str(exc.value)
 
     def test_decode_uses_adobe_base64_encoding(self):
 
@@ -238,4 +238,4 @@ class TestShortClientTokenDecoder(DatabaseTest):
 
         with pytest.raises(ValueError) as exc:
             self.decoder.decode_two_part(self._db, fake_username, "I am not a real encoded signature")
-        assert "Invalid password" in exc.value
+        assert "Invalid password" in str(exc.value)

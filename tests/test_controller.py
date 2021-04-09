@@ -4,7 +4,7 @@ import os
 import json
 import random
 from smtplib import SMTPException
-from urllib import unquote
+from urllib.parse import unquote
 
 from contextlib import contextmanager
 from controller import (
@@ -239,7 +239,7 @@ class TestLibraryRegistryController(ControllerTest):
         # Getting rid of the "uuid" key before populating flattened, because its value is just a string, not a subdictionary.
         # The UUID information is still being checked elsewhere.
         del actual["uuid"]
-        for subdictionary in actual.values():
+        for subdictionary in list(actual.values()):
             flattened.update(subdictionary)
 
         for k in flattened:
@@ -355,58 +355,49 @@ class TestLibraryRegistryController(ControllerTest):
         libraries = response.get("libraries")
 
         # There are currently four libraries
-        eq_(len(libraries), 4)
+        assert len(libraries) == 4
 
         with self.app.test_request_context("/libraries"):
             response = self.controller.libraries_opds(False)
 
-            eq_("200 OK", response.status)
-            eq_(OPDSCatalog.OPDS_TYPE, response.headers['Content-Type'])
+            assert response.status == "200 OK"
+            assert response.headers['Content-Type'] == OPDSCatalog.OPDS_TYPE
 
-            catalog = json.loads(response.data)
+            catalog = response.json
 
             # The cancelled library got filtered out.
-            eq_(len(catalog['catalogs']), 3)
+            assert len(catalog['catalogs']) == 3
 
             # The other libraries are in alphabetical order.
             [ct, ks, nypl] = catalog['catalogs']
-            eq_("Connecticut State Library", ct['metadata']['title'])
-            eq_(self.connecticut_state_library.internal_urn, ct['metadata']['id'])
+            assert ct['metadata']['title'] == "Connecticut State Library"
+            assert ct['metadata']['id'] == self.connecticut_state_library.internal_urn
 
-            eq_("Kansas State Library", ks['metadata']['title'])
-            eq_(self.kansas_state_library.internal_urn, ks['metadata']['id'])
+            assert ks['metadata']['title'] == "Kansas State Library"
+            assert ks['metadata']['id'] == self.kansas_state_library.internal_urn
 
-            eq_("NYPL", nypl['metadata']['title'])
-            eq_(self.nypl.internal_urn, nypl['metadata']['id'])
+            assert nypl['metadata']['title'] == "NYPL"
+            assert nypl['metadata']['id'] == self.nypl.internal_urn
 
-            [library_link, register_link, search_link, self_link] = sorted(
-                catalog['links'], key=lambda x: x['rel']
-            )
+            [library_link, register_link, search_link, self_link] = sorted(catalog['links'], key=lambda x: x['rel'])
             url_for = self.app.library_registry.url_for
 
-            eq_(url_for("libraries_opds"), self_link['href'])
-            eq_("self", self_link['rel'])
-            eq_(OPDSCatalog.OPDS_TYPE, self_link['type'])
+            assert self_link['href'] == url_for("libraries_opds")
+            assert self_link['rel'] == "self"
+            assert self_link['type'] == OPDSCatalog.OPDS_TYPE
 
             # Try again with a location in Kansas.
             #
-            # See test_app_server.py to verify that @uses_location
-            # converts normal-looking latitude/longitude into this
-            # format.
+            # See test_app_server.py to verify that @uses_location converts normal-looking
+            # latitude/longitude into this format.
             with self.app.test_request_context("/libraries"):
-                response = self.controller.libraries_opds(
-                    False, location="SRID=4326;POINT(-98 39)"
-                )
-            catalog = json.loads(response.data)
+                response = self.controller.libraries_opds(False, location="SRID=4326;POINT(-98 39)")
+            catalog = response.json
             titles = [x['metadata']['title'] for x in catalog['catalogs']]
 
             # The nearby library is promoted to the top of the list.
             # The other libraries are still in alphabetical order.
-            eq_(
-                [u'Kansas State Library', u'Connecticut State Library',
-                 u'NYPL'],
-                titles
-            )
+            assert titles == ['Kansas State Library', 'Connecticut State Library', 'NYPL']
 
     def test_libraries_opds(self):
         library = self._library(
@@ -468,8 +459,8 @@ class TestLibraryRegistryController(ControllerTest):
             # The nearby library is promoted to the top of the list.
             # The other libraries are still in alphabetical order.
             eq_(
-                [u'Kansas State Library', u'Connecticut State Library',
-                 u'NYPL'],
+                ['Kansas State Library', 'Connecticut State Library',
+                 'NYPL'],
                 titles
             )
 
@@ -820,7 +811,7 @@ class TestLibraryRegistryController(ControllerTest):
                 x for x in catalogs['catalogs']
                 if x['metadata']['id'] == self.nypl.internal_urn
             ]
-            assert("", catalog['metadata']['title'])
+            assert catalog['metadata']['title'] == "NYPL"
 
             # Some of the links are the same as in the production feed;
             # others are different.
@@ -1058,7 +1049,7 @@ class TestLibraryRegistryController(ControllerTest):
             eq_("data:text/html;base64", header)
 
             decoded = base64.b64decode(encoded)
-            eq_(html, decoded)
+            eq_(html, decoded.decode("utf8"))
 
     def test_register_fails_when_no_auth_document_url_provided(self):
         """Without the URL to an Authentication For OPDS document,
@@ -1391,10 +1382,7 @@ class TestLibraryRegistryController(ControllerTest):
             auth_document = self._auth_document()
 
             # Remove the crucial link.
-            auth_document['links'] = filter(
-            lambda x: x['rel'] != rel or not x['href'].startswith("mailto:"),
-                auth_document['links']
-            )
+            auth_document['links'] = [x for x in auth_document['links'] if x['rel'] != rel or not x['href'].startswith("mailto:")]
 
             def _request_fails():
                 self.http_client.queue_response(
@@ -1522,8 +1510,7 @@ class TestLibraryRegistryController(ControllerTest):
             # because it was generated using techniques designed for
             # cryptography which ignore seed(). But we do know how
             # long it is.
-            # TODO PYTHON3 expect = 'UDAXIH'
-            expect = u'QAHFTR'
+            expect = 'UDAXIH'
             eq_(expect, library.short_name)
             eq_(48, len(library.shared_secret))
 
@@ -1684,7 +1671,7 @@ class TestLibraryRegistryController(ControllerTest):
             ("contact", "mailto:me@library.org")
         ])
         form_args_with_reset = ImmutableMultiDict(
-            form_args_no_reset.items() + [
+            list(form_args_no_reset.items()) + [
                 ("reset_shared_secret", "y")
             ]
         )
