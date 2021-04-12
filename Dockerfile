@@ -170,6 +170,11 @@ ENV FLASK_ENV development
 # path is still correct when the bind mount is applied at run time.
 COPY ./Pipfile ./
 
+# Copy the NPM package files to the temporary app directory, to allow for
+# building the front end admin JS and CSS files without the full host mount.
+COPY ./package.json ./
+COPY ./package-lock.json ./
+
 # Install the system dependencies and the Python dependencies. Note that if 
 # you want to be able to install new Python dependencies on the fly from
 # within the container, you should remove the line below that deletes the
@@ -194,6 +199,7 @@ RUN set -ex \
 		linux-headers \
 		make \
 		ncurses-dev \
+        npm \
 		openssl-dev \
 		pax-utils \
         postgresql-dev \
@@ -212,13 +218,83 @@ RUN set -ex \
     libxcb-dev \
  && mkdir ${WORKON_HOME} \
  && cd /libreg_app \
- && pipenv install --dev --skip-lock \
+ && pipenv install --dev --skip-lock --clear \
+ && mkdir /tmp/libreg_npm_build \
+ && cp ./package*.json /tmp/libreg_npm_build \
+ && npm install --prefix /tmp/libreg_npm_build \
+ && mkdir -p /libreg_static/static \
+ && cp /tmp/libreg_npm_build/node_modules/simplified-registry-admin/dist/* /libreg_static/static \
+ && rm -rf /tmp/libreg_npm_build \
+ && chown -R nginx:nginx /libreg_* \
  && apk del --no-network .build-deps
 
 ##############################################################################
 
 
 ##############################################################################
+# Build target: libreg_prod
+#
+# The primary difference between this target and libreg_dev is where it 
+# expects to source the codebase from. Where the development target is based
+# on a local host mount of the project source, the production image will be
+# built from a specific tagged checkout of the project's GitHub repository.
 FROM builder AS libreg_prod
+
+ARG LIBREG_PROD_GITHUB_BRANCH
+
+# See the libreg_dev target for notes on WORKON_HOME.
+ENV WORKON_HOME /libreg_venv
+ENV FLASK_ENV production
+
+RUN set -ex \
+	&& apk add --no-cache --virtual .build-deps  \
+		bluez-dev \
+        build-base \
+		bzip2-dev \
+		coreutils \
+		dpkg-dev dpkg \
+		expat-dev \
+		findutils \
+		gcc \
+		gdbm-dev \
+        git \
+		libc-dev \
+		libffi-dev \
+		libnsl-dev \
+		libtirpc-dev \
+        libxslt-dev \
+		linux-headers \
+		make \
+		ncurses-dev \
+        npm \
+		openssl-dev \
+		pax-utils \
+        postgresql-dev \
+		readline-dev \
+		sqlite-dev \
+		tcl-dev \
+		tk \
+		tk-dev \
+		util-linux-dev \
+		xz-dev \
+		zlib-dev \
+ # We need to leave these installed for psycopg2 and PIL
+ && apk add --no-cache \
+    libpq \
+    jpeg-dev \
+    libxcb-dev \
+ && mkdir ${WORKON_HOME} \
+ && git clone https://github.com/NYPL-Simplified/library_registry.git /libreg_app \
+ && cd /libreg_app \
+ && git checkout $LIBREG_PROD_GITHUB_BRANCH \
+ && pipenv install --dev --skip-lock --clear \
+ && mkdir /tmp/libreg_npm_build \
+ && cp ./package*.json /tmp/libreg_npm_build \
+ && npm install --prefix /tmp/libreg_npm_build \
+ && mkdir -p /libreg_static/static \
+ && cp /tmp/libreg_npm_build/node_modules/simplified-registry-admin/dist/* /libreg_static/static \
+ && rm -rf /tmp/libreg_npm_build \
+ && chown -R nginx:nginx /libreg_* \
+ && apk del --no-network .build-deps
 
 ##############################################################################

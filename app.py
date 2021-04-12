@@ -224,18 +224,6 @@ def adobe_vendor_id_status():
 def admin_view():
     return app.library_registry.view_controller()
 
-@app.route('/admin/static/registry-admin.js')
-@returns_problem_detail
-def admin_js():
-    directory = os.path.join(os.path.abspath(os.path.dirname(__file__)), "node_modules", "simplified-registry-admin", "dist")
-    return app.library_registry.static_files.static_file(directory, "registry-admin.js")
-
-@app.route('/admin/static/registry-admin.css')
-@returns_problem_detail
-def admin_css():
-    directory = os.path.join(os.path.abspath(os.path.dirname(__file__)), "node_modules", "simplified-registry-admin", "dist")
-    return app.library_registry.static_files.static_file(directory, "registry-admin.css")
-
 
 if __name__ == '__main__':
     debug = True

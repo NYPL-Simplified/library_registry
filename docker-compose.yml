@@ -20,7 +20,6 @@ services:
       target: libreg_dev
     ports:
       - "80:80"
-    entrypoint: ["tail", "-f", "/dev/null"]
     environment:
       - SIMPLIFIED_TEST_DATABASE=postgresql://simplified_test:simplified_test@local_db:5432/simplified_registry_test
       - SIMPLIFIED_PRODUCTION_DATABASE=postgresql://simplified:simplified@local_db:5432/simplified_registry_dev
