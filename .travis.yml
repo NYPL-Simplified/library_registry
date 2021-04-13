@@ -26,13 +26,13 @@ install:
   - pipenv install
 
 env:
-  - SIMPLIFIED_TEST_DATABASE="postgres://simplified_test:test@localhost:5432/simplified_library_registry_test"
+  - SIMPLIFIED_TEST_DATABASE="postgres://simplified_test:test@localhost:5433/simplified_library_registry_test"
 
 before_script:
-  - psql -c 'create user simplified_test;' -U postgres
-  - psql -c 'create database simplified_library_registry_test;' -U postgres
-  - psql -c 'create extension postgis;' -U postgres simplified_library_registry_test
-  - psql -c 'create extension fuzzystrmatch;' -U postgres simplified_library_registry_test
-  - psql -c 'grant all privileges on database simplified_library_registry_test to simplified_test;' -U postgres
+  - psql -c 'create user simplified_test;' -U postgres -p 5433
+  - psql -c 'create database simplified_library_registry_test;' -U postgres -p 5433
+  - psql -c 'create extension postgis;' -U postgres simplified_library_registry_test -p 5433
+  - psql -c 'create extension fuzzystrmatch;' -U postgres simplified_library_registry_test -p 5433
+  - psql -c 'grant all privileges on database simplified_library_registry_test to simplified_test;' -U postgres -p 5433
 
 script: ./test
