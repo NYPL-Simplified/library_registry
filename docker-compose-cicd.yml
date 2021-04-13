@@ -18,6 +18,8 @@ services:
     build:
       context: .
       target: libreg_dev
+      labels:
+        - "com.nypl.docker.imagename=library_registry"
     entrypoint: ["tail", "-f", "/dev/null"]
     environment:
       - SIMPLIFIED_TEST_DATABASE=postgresql://simplified_test:simplified_test@libreg_test_db:5432/simplified_registry_test
