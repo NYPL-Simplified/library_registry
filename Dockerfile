@@ -106,51 +106,14 @@ RUN set -x \
 #   https://github.com/pypa/pipenv/issues/4052#issuecomment-588480867
 ENV CI 1
 
-COPY ./docker/gunicorn.conf.py /etc/gunicorn/gunicorn.conf.py
-COPY ./docker/nginx.conf /etc/nginx/nginx.conf
-COPY ./docker/supervisord-alpine.ini /etc/supervisord.conf
-COPY ./docker/runinvenv /usr/local/bin/runinvenv
-COPY ./docker/docker-entrypoint.sh /docker-entrypoint.sh
-
-ENTRYPOINT ["sh", "/docker-entrypoint.sh"]
-
-##############################################################################
-
-
-
-##############################################################################
-# Build target: libreg_dev
-# 
-# This target is meant for local development, and does a few things worth mentioning:
-#
-#   * During the image build, it installs the project's Python dependencies by
-#     copying the current version of the Pipfile and Pipfile.lock into the image,
-#     installing system build dependencies, then installing the Python packages
-#     to a virtualenv linked to the /libreg_app directory.
-#   * It doesn't get the project source from GitHub, instead relying on a Docker
-#     bind mount when the container is started. That way, the running container
-#     can do file watching of the project files as they exist on the host, and
-#     none of your edits are lost when the container exits.
-#
-# To make that work, a directory is created at /libreg_app to be the eventual
-# target of the bind mount. However since mounts are not available at build time,
-# and the relationship between the virtualenv and the project directory is based
-# on the location of the Pipfile at the time you run `pipenv install`, it's 
-# necessary to copy the Pipfile and Pipfile.lock into /libreg_app during the
-# build process, install the Python dependencies, then allow that directory to
-# be overwritten at run time by the bind mount.
-#
-# All of which is to say this process is slightly delicate, and it's pipenv's fault.
-# 
-# Also, DANGER WILL ROBINSON, if you are going to install new packages to the dev
-# env while it's running, be aware that you must do so from INSIDE the container,
-# NOT from the host machine. If you run `pipenv install somepackage` on the host,
-# it will end up in a virtualenv directory ON THE HOST, and your running code
-# inside the container will not find it. Shell into the container, then install.
-FROM builder AS libreg_dev
-
 # This creates the /libreg_app directory without issuing a separate RUN directive.
 WORKDIR /libreg_app
+
+# Copy over the dependency files individually. We copy over the entire local
+# directory later in the process, *after* the heavy RUN instructions, so that
+# the docker layer caching isn't impacted by extraneous changes in the repo.
+COPY ./Pipfile* ./
+COPY ./package*.json ./
 
 # Setting WORKON_HOME causes pipenv to put its virtualenv in a pre-determined, 
 # OS-independent location. Note that /libreg_venv is NOT the virtualenv, it's 
@@ -164,16 +127,6 @@ WORKDIR /libreg_app
 #   https://github.com/pypa/pipenv/issues/1226#issuecomment-598487793
 #
 ENV WORKON_HOME /libreg_venv
-ENV FLASK_ENV development
-
-# Copy the Pipfile to the temporary app directory, so the install's virtualenv 
-# path is still correct when the bind mount is applied at run time.
-COPY ./Pipfile ./
-
-# Copy the NPM package files to the temporary app directory, to allow for
-# building the front end admin JS and CSS files without the full host mount.
-COPY ./package.json ./
-COPY ./package-lock.json ./
 
 # Install the system dependencies and the Python dependencies. Note that if 
 # you want to be able to install new Python dependencies on the fly from
@@ -219,82 +172,43 @@ RUN set -ex \
  && mkdir ${WORKON_HOME} \
  && cd /libreg_app \
  && pipenv install --dev --skip-lock --clear \
+ # Set up the NPM build in a place we can delete it once we have our built artifacts
  && mkdir /tmp/libreg_npm_build \
  && cp ./package*.json /tmp/libreg_npm_build \
  && npm install --prefix /tmp/libreg_npm_build \
  && mkdir -p /libreg_static/static \
  && cp /tmp/libreg_npm_build/node_modules/simplified-registry-admin/dist/* /libreg_static/static \
  && rm -rf /tmp/libreg_npm_build \
- && chown -R nginx:nginx /libreg_* \
  && apk del --no-network .build-deps
 
+COPY ./docker/gunicorn.conf.py /etc/gunicorn/gunicorn.conf.py
+COPY ./docker/nginx.conf /etc/nginx/nginx.conf
+COPY ./docker/supervisord-alpine.ini /etc/supervisord.conf
+COPY ./docker/runinvenv /usr/local/bin/runinvenv
+COPY ./docker/docker-entrypoint.sh /docker-entrypoint.sh
+
+# Copy the entire project checkout into the image.
+COPY . /libreg_app
+
+ENTRYPOINT ["/bin/sh", "-c", "/docker-entrypoint.sh"]
+
+##############################################################################
+
+
+##############################################################################
+# Build target: libreg_dev
+# 
+FROM builder AS libreg_dev
+
+ENV FLASK_ENV development
+ENV TESTING 1
 ##############################################################################
 
 
 ##############################################################################
 # Build target: libreg_prod
 #
-# The primary difference between this target and libreg_dev is where it 
-# expects to source the codebase from. Where the development target is based
-# on a local host mount of the project source, the production image will be
-# built from a specific tagged checkout of the project's GitHub repository.
 FROM builder AS libreg_prod
 
-ARG LIBREG_PROD_GITHUB_BRANCH
-
-# See the libreg_dev target for notes on WORKON_HOME.
-ENV WORKON_HOME /libreg_venv
 ENV FLASK_ENV production
-
-RUN set -ex \
-	&& apk add --no-cache --virtual .build-deps  \
-		bluez-dev \
-        build-base \
-		bzip2-dev \
-		coreutils \
-		dpkg-dev dpkg \
-		expat-dev \
-		findutils \
-		gcc \
-		gdbm-dev \
-        git \
-		libc-dev \
-		libffi-dev \
-		libnsl-dev \
-		libtirpc-dev \
-        libxslt-dev \
-		linux-headers \
-		make \
-		ncurses-dev \
-        npm \
-		openssl-dev \
-		pax-utils \
-        postgresql-dev \
-		readline-dev \
-		sqlite-dev \
-		tcl-dev \
-		tk \
-		tk-dev \
-		util-linux-dev \
-		xz-dev \
-		zlib-dev \
- # We need to leave these installed for psycopg2 and PIL
- && apk add --no-cache \
-    libpq \
-    jpeg-dev \
-    libxcb-dev \
- && mkdir ${WORKON_HOME} \
- && git clone https://github.com/NYPL-Simplified/library_registry.git /libreg_app \
- && cd /libreg_app \
- && git checkout $LIBREG_PROD_GITHUB_BRANCH \
- && pipenv install --dev --skip-lock --clear \
- && mkdir /tmp/libreg_npm_build \
- && cp ./package*.json /tmp/libreg_npm_build \
- && npm install --prefix /tmp/libreg_npm_build \
- && mkdir -p /libreg_static/static \
- && cp /tmp/libreg_npm_build/node_modules/simplified-registry-admin/dist/* /libreg_static/static \
- && rm -rf /tmp/libreg_npm_build \
- && chown -R nginx:nginx /libreg_* \
- && apk del --no-network .build-deps
-
 ##############################################################################
