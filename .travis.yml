@@ -1,5 +1,10 @@
+dist: focal
+
 addons:
-  postgresql: "9.6"
+  postgresql: "12"
+  apt:
+    packages:
+      - postgresql-12-postgis-3
 
 services:
   - postgresql
@@ -7,7 +12,7 @@ services:
 language: python
 
 python:
-  - "2.7"
+  - "3.9"
 
 cache: pip
 
@@ -15,12 +20,10 @@ git:
   submodules: false
 
 before_install:
-  - pip install "setuptools>=18.5"
-  - sudo apt-get install -y postgresql-9.6-postgis-2.4
-  - sleep 10
-
+  - pip install setuptools pipenv
+  
 install:
-  - pip install -r requirements.txt
+  - pipenv install
 
 env:
   - SIMPLIFIED_TEST_DATABASE="postgres://simplified_test:test@localhost:5432/simplified_library_registry_test"
