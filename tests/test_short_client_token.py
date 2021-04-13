@@ -11,9 +11,6 @@ from model import (
 
 from . import DatabaseTest
 
-def eq_(a, b):
-    assert a == b
-
 
 class TestShortClientTokenEncoder(object):
 
@@ -26,19 +23,16 @@ class TestShortClientTokenEncoder(object):
         value = b"!\tFN6~'Es52?X!#)Z*_S"
 
         encoded = self.encoder.adobe_base64_encode(value)
-        eq_(b'IQlGTjZ:J0VzNTI;WCEjKVoqX1M@', encoded)
+        assert encoded == b'IQlGTjZ:J0VzNTI;WCEjKVoqX1M@'
 
         # This is like normal base64 encoding, but with a colon
         # replacing the plus character, a semicolon replacing the
         # slash, an at sign replacing the equal sign and the final
         # newline stripped.
-        eq_(
-            encoded.replace(b":", b"+").replace(b";", b"/").replace(b"@", b"=") + b"\n",
-            base64.encodebytes(value)
-        )
+        assert base64.encodebytes(value) == encoded.replace(b":", b"+").replace(b";", b"/").replace(b"@", b"=") + b"\n"
 
         # We can reverse the encoding to get the original value.
-        eq_(value, self.encoder.adobe_base64_decode(encoded))
+        assert self.encoder.adobe_base64_decode(encoded) == value
 
     def test_encode_short_client_token_uses_adobe_base64_encoding(self):
         class MockSigner(object):
@@ -54,7 +48,7 @@ class TestShortClientTokenEncoder(object):
 
         # The signature part of the token has been encoded with our
         # custom encoding, not vanilla base64.
-        eq_('lib|0|1234|IQlGTjZ:J0VzNTI;WCEjKVoqX1M@', token)
+        assert token == 'lib|0|1234|IQlGTjZ:J0VzNTI;WCEjKVoqX1M@'
 
 
     def test_must_provide_library_information(self):
@@ -89,9 +83,7 @@ class TestShortClientTokenEncoder(object):
         # what would otherwise be normal base64 text. Similarly for
         # the semicolon which replaced the slash, and the at sign which
         # replaced the equals sign.
-        eq_('a library|1234.5|a patron identifier|YoNGn7f38mF531KSWJ;o1H0Z3chbC:uTE:t7pAwqYxM@',
-            value
-        )
+        assert value == 'a library|1234.5|a patron identifier|YoNGn7f38mF531KSWJ;o1H0Z3chbC:uTE:t7pAwqYxM@'
 
         # Dissect the known value to show how it works.
         token, signature = value.rsplit("|", 1)
@@ -102,13 +94,13 @@ class TestShortClientTokenEncoder(object):
 
         # The token comes from the library name, the patron identifier,
         # and the time of creation.
-        eq_("a library|1234.5|a patron identifier", token)
+        assert token == "a library|1234.5|a patron identifier"
 
         # The signature comes from signing the token with the
         # secret associated with this library.
         key = self.encoder.signer.prepare_key(secret)
         expect_signature = self.encoder.signer.sign(token.encode("utf8"), key)
-        eq_(expect_signature, signature)
+        assert signature == expect_signature
 
 
 class TestShortClientTokenDecoder(DatabaseTest):
@@ -142,15 +134,15 @@ class TestShortClientTokenDecoder(DatabaseTest):
 
         identifier = self.decoder.decode(self._db, short_client_token)
         assert isinstance(identifier, DelegatedPatronIdentifier)
-        eq_(self.library, identifier.library)
-        eq_(DelegatedPatronIdentifier.ADOBE_ACCOUNT_ID, identifier.type)
-        eq_("Foreign Patron", identifier.patron_identifier)
+        assert identifier.library == self.library
+        assert identifier.type == DelegatedPatronIdentifier.ADOBE_ACCOUNT_ID
+        assert identifier.patron_identifier == "Foreign Patron"
         assert identifier.delegated_identifier.startswith('urn:uuid:')
 
         # Do the lookup again and verify we get the same
         # DelegatedPatronIdentifier.
         identifier2 = self.decoder.decode(self._db, short_client_token)
-        eq_(identifier, identifier2)
+        assert identifier2 == identifier
 
     def test_short_client_token_lookup_delegated_patron_identifier_failure(self):
         """Test various token decoding errors"""
@@ -218,7 +210,7 @@ class TestShortClientTokenDecoder(DatabaseTest):
         # Make sure that decode properly reverses that change when
         # decoding the 'password'.
         def _decode(_db, token, supposed_signature):
-            eq_(supposed_signature, signature)
+            assert supposed_signature == signature
             self.decoder.test_code_ran = True
             return "identifier", "uuid"
         self.decoder._decode = _decode

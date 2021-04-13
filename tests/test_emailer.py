@@ -10,9 +10,6 @@ from emailer import (
 )
 import quopri
 
-def eq_(a, b):
-    assert a == b
-
 
 class TestEmailTemplate(object):
     """Test the ability to generate email messages."""
@@ -117,7 +114,7 @@ class TestEmailer(DatabaseTest):
 
         # If there's only one, _sitewide_integration finds it.
         integration = self._integration()
-        eq_(integration, m(self._db))
+        assert m(self._db) == integration
 
         # If there are multiple integrations with goal=Emailer.GOAL, no
         # sitewide configuration can be determined.
@@ -132,16 +129,16 @@ class TestEmailer(DatabaseTest):
         emailer = Emailer.from_sitewide_integration(self._db)
 
         # The Emailer's configuration is based on the sitewide integration.
-        eq_("smtp_username", emailer.smtp_username)
-        eq_("smtp_password", emailer.smtp_password)
-        eq_("smtp_host", emailer.smtp_host)
-        eq_("me@registry", emailer.from_address)
+        assert emailer.smtp_username == "smtp_username"
+        assert emailer.smtp_password == "smtp_password"
+        assert emailer.smtp_host == "smtp_host"
+        assert emailer.from_address == "me@registry"
 
         # Default EmailTemplates have been created for all known email types.
         for email_type in Emailer.EMAIL_TYPES:
             template = emailer.templates[email_type]
-            eq_(Emailer.SUBJECTS[email_type], template.subject_template)
-            eq_(Emailer.BODIES[email_type], template.body_template)
+            assert template.subject_template == Emailer.SUBJECTS[email_type]
+            assert template.body_template == Emailer.BODIES[email_type]
 
         # Configure custom subject lines and body templates for the
         # known email types, and build another Emailer.
@@ -155,8 +152,8 @@ class TestEmailer(DatabaseTest):
         emailer = Emailer.from_sitewide_integration(self._db)
         for email_type in Emailer.EMAIL_TYPES:
             template = emailer.templates[email_type]
-            eq_("subject %s" % email_type, template.subject_template)
-            eq_("body %s" % email_type, template.body_template)
+            assert template.subject_template == "subject %s" % email_type
+            assert template.body_template == "body %s" % email_type
 
     def test_constructor(self):
         """Verify the exceptions raised when required constructor
@@ -301,7 +298,7 @@ The link will expire in about a day. If the link expires, just re-register your 
         # The template was filled out and passed into our mocked-up
         # _send_email implementation.
         (to, body, smtp) = emailer.emails.pop()
-        eq_("you@library", to)
+        assert to == "you@library"
         for phrase in [
             "From: Me <me@registry>",
             "To: you@library",
@@ -310,7 +307,7 @@ The link will expire in about a day. If the link expires, just re-register your 
         ]:
             print(phrase)
             assert phrase in body
-        eq_(mock_smtp, smtp)
+        assert smtp == mock_smtp
 
     def test__send_email(self):
         """Verify that send_email calls certain methods on smtplib.SMTP."""
@@ -321,24 +318,8 @@ The link will expire in about a day. If the link expires, just re-register your 
 
         # Five smtplib.SMTP methods were called.
         connect, starttls, login, sendmail, quit = mock.calls
-        eq_(
-            ('connect', (emailer.smtp_host, emailer.smtp_port), {}),
-            connect
-        )
-
-        eq_(
-            ('starttls', (), {}),
-            starttls
-        )
-
-        eq_(
-            ('login', (emailer.smtp_username, emailer.smtp_password), {}),
-            login
-        )
-
-        eq_(
-            ('sendmail', (emailer.from_address, "you@library", "email body"), {}),
-            sendmail
-        )
-
-        eq_(("quit", (), {}), quit)
+        assert connect == ('connect', (emailer.smtp_host, emailer.smtp_port), {})
+        assert starttls == ('starttls', (), {})
+        assert login == ('login', (emailer.smtp_username, emailer.smtp_password), {})
+        assert sendmail == ('sendmail', (emailer.from_address, "you@library", "email body"), {})
+        assert quit == ("quit", (), {})
