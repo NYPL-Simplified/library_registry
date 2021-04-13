@@ -27,13 +27,13 @@ install:
 
 env:
   - PGPORT=5433
-  - SIMPLIFIED_TEST_DATABASE="postgres://simplified_test:test@localhost:5433/simplified_library_registry_test"
-
+  - SIMPLIFIED_TEST_DATABASE="postgres://simplified_test:simplified_test@localhost:5433/simplified_library_registry_test"
+  
 before_script:
-  - psql -c 'create user simplified_test;' -U travis -p 5433
-  - psql -c 'create database simplified_library_registry_test;' -U travis -p 5433
-  - psql -c 'create extension postgis;' -U travis simplified_library_registry_test -p 5433
-  - psql -c 'create extension fuzzystrmatch;' -U travis simplified_library_registry_test -p 5433
-  - psql -c 'grant all privileges on database simplified_library_registry_test to simplified_test;' -U travis -p 5433
+  - psql -c 'CREATE USER simplified_test WITH PASSWORD \'simplified_test\';' -U travis -p 5433
+  - psql -c 'CREATE DATABASE simplified_library_registry_test;' -U travis -p 5433
+  - psql -c 'CREATE EXTENSION postgis;' -U travis simplified_library_registry_test -p 5433
+  - psql -c 'CREATE EXTENSION fuzzystrmatch;' -U travis simplified_library_registry_test -p 5433
+  - psql -c 'GRANT ALL PRIVILEGES ON DATABASE simplified_library_registry_test TO simplified_test;' -U travis -p 5433
 
-script: ./test
+script: pipenv run ./test
