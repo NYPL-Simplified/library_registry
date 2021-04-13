@@ -26,8 +26,9 @@ install:
   - pipenv install
 
 env:
-  - SIMPLIFIED_TEST_DATABASE=postgres://simplified_test:simplified_test@localhost:5433/simplified_library_registry_test
-  - PGPORT=5433
+  global:
+    - SIMPLIFIED_TEST_DATABASE=postgres://simplified_test:simplified_test@localhost:5433/simplified_library_registry_test
+    - PGPORT=5433
   
 before_script:
   - psql -c 'CREATE USER simplified_test WITH PASSWORD '"'"'simplified_test'"'"';' -U travis -p 5433
