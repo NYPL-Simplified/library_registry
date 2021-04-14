@@ -1,4 +1,4 @@
-.PHONY: help build db-session webapp-shell up up-watch start stop down clean full-clean
+.PHONY: help build db-session webapp-shell up up-watch start stop down test clean full-clean
 .DEFAULT_GOAL := help
 
 help:
@@ -14,6 +14,7 @@ help:
 	@echo "    start          - Start a stopped cluster"
 	@echo "    stop           - Stop the cluster without removing containers"
 	@echo "    down           - Take down the local cluster"
+	@echo "    test           - Run the python test suite on the webapp container"
 	@echo "    clean          - Take down the local cluster and removes the db volume"
 	@echo "    full-clean     - Take down the local cluster and remove containers, volumes, and images"
 
@@ -40,6 +41,9 @@ stop:
 
 down:
 	docker-compose down
+
+test:
+	docker exec -it libreg_webapp pipenv run pytest tests
 
 clean:
 	docker-compose down --volumes
