@@ -1,15 +1,13 @@
 #!/bin/sh
-set -e
 
 PG_READY=""
 PG_READY_WAIT_SECONDS=5
 COUNT=0
+RETRIES=10
 
 cd /libreg_app
 
-until [ -n "$PG_READY" ] || [ $COUNT -gt 5 ]; do
-    COUNT=$((COUNT+1))
-
+pg_is_ready () {
     pipenv run python > /dev/null 2>&1 <<EOF
 import os,sys,psycopg2
 try:
@@ -18,6 +16,12 @@ except Exception:
   sys.exit(1)
 sys.exit(0)
 EOF
+}
+
+until [ -n "$PG_READY" ] || [ $COUNT -gt $RETRIES ]; do
+    COUNT=$((COUNT+1))
+
+    pg_is_ready
 
     if [ $? -eq 0 ]; then
         PG_READY="true"
@@ -27,5 +31,10 @@ EOF
     fi
 done
 
-# Start up Supervisor, with Nginx and uWSGI
-exec /usr/local/bin/supervisord -c /etc/supervisord.conf
+if [ -n "$PG_READY" ]; then
+    # Start up Supervisor, with Nginx and uWSGI
+    exec /usr/local/bin/supervisord -c /etc/supervisord.conf
+else
+    echo "Database never became available, exiting!"
+    exit 1
+fi

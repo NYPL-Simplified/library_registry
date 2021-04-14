@@ -187,9 +187,6 @@ COPY ./docker/supervisord-alpine.ini /etc/supervisord.conf
 COPY ./docker/runinvenv /usr/local/bin/runinvenv
 COPY ./docker/docker-entrypoint.sh /docker-entrypoint.sh
 
-# Copy the entire project checkout into the image.
-COPY . /libreg_app
-
 ENTRYPOINT ["/bin/sh", "-c", "/docker-entrypoint.sh"]
 
 ##############################################################################
@@ -198,6 +195,9 @@ ENTRYPOINT ["/bin/sh", "-c", "/docker-entrypoint.sh"]
 ##############################################################################
 # Build target: libreg_dev
 # 
+# Note that this target assumes a host mount is in place to link the current
+# directory into the container at /libreg_app. The production target copies in
+# the entire project directory since it will remain static.
 FROM builder AS libreg_dev
 
 ENV FLASK_ENV development
@@ -211,4 +211,6 @@ ENV TESTING 1
 FROM builder AS libreg_prod
 
 ENV FLASK_ENV production
+
+COPY . /libreg_app
 ##############################################################################
