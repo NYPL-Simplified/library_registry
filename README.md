@@ -2,7 +2,7 @@
 
 A geographic search engine for matching people to the libraries that serve them.
 
-## Installation
+## Installation (Docker)
 
 Because the Registry runs in a Docker container, the only required software is [Docker Desktop](https://www.docker.com/products/docker-desktop). The database and webapp containers expect to be able to operate on ports 5432 and 80, respectively--if those ports are in use already you may need to amend the `docker-compose.yml` file to add alternate ports.
 
@@ -49,3 +49,69 @@ While the cluster is running, you can access the containers with these commands:
 ### Viewing the Web Interface
 
 The registry listens (via Nginx) on port 80, so once the cluster is running you should be able to point a browser at `http://localhost/admin/` and access it with the username/password `admin/admin`.
+
+## Installation (non-Docker)
+
+To install the registry locally, you'll need the following:
+
+* PostgreSQL 12+
+* PostGIS 3
+* Python 3.6+ (3.9 is the build target for the Docker install)
+* Appropriate system dependencies to build the Python dependencies, which may include:
+    * `make` / `gcc` / `build-essential` (debian) / `build-base` (alpine) / XCode CLI Tools (mac)
+    * Compression libs like `bzip2-dev`, `zlib-dev`, etc.
+    * PostgreSQL development libs: `libpq`, `postgresql-dev`, etc., for [`psycopg2`](https://www.psycopg.org)
+    * Image processing libs for [`Pillow`](https://pillow.readthedocs.io/en/stable/) such as `libjpeg-dev`
+
+### Creating the Databases
+
+With a running PostgreSQL/PostGIS installation, you can create the required test and dev databases by executing:
+
+```SQL
+CREATE DATABASE simplified_registry_dev;
+CREATE USER simplified WITH PASSWORD 'simplified';
+GRANT ALL PRIVILEGES ON DATABASE simplified_registry_dev TO simplified;
+
+CREATE DATABASE simplified_registry_test;
+CREATE USER simplified_test WITH PASSWORD 'simplified_test';
+GRANT ALL PRIVILEGES ON DATABASE simplified_registry_test TO simplified_test;
+
+\c simplified_registry_dev
+CREATE EXTENSION fuzzystrmatch;
+CREATE EXTENSION postgis;
+
+\c simplified_registry_test
+CREATE EXTENSION fuzzystrmatch;
+CREATE EXTENSION postgis;
+```
+
+You should then create a `.env` file in the project directory with the following contents:
+
+```SHELL
+SIMPLIFIED_TEST_DATABASE=postgresql://simplified_test:simplified_test@localhost:5432/simplified_registry_test
+SIMPLIFIED_PRODUCTION_DATABASE=postgresql://simplified:simplified@localhost:5432/simplified_registry_dev
+```
+
+### Installing Python Dependencies
+
+The project expects to use [`pipenv`](https://pypi.org/project/pipenv/) for dependency and virtualenv management, so first install that:
+
+```shell
+pip install pipenv
+```
+
+Having done so, you should be able to run the following in the project directory to install all dependencies:
+
+```
+pipenv install --dev
+```
+
+### Running the Registry
+
+To start the registry inside the virtualenv that `pipenv` creates:
+
+```shell
+FLASK_APP=app.py pipenv run flask run
+```
+
+Pipenv should read in the local `.env` file and supply those database connection strings to the application, which will be run by the Flask development server.
