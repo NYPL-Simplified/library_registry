@@ -7,6 +7,7 @@ help:
 	@echo "Commands:"
 	@echo ""
 	@echo "    build          - Build the libreg_webapp and libreg_local_db images"
+	@echo "    build-prod     - Build images based on the docker-compose-cicd.yml file"
 	@echo "    db-session     - Start a psql session as the superuser on the db container"
 	@echo "    webapp-shell   - Open a shell on the webapp container"
 	@echo "    up             - Bring up the local cluster in detached mode"
@@ -23,9 +24,6 @@ build:
 
 build-prod:
 	docker-compose -f docker-compose-cicd.yml build
-
-tag-prod:
-    docker tag $(docker image ls -q --filter="dangling=false" --filter="label=com.nypl.docker.imagename=library_registry" --filter="reference=*libreg_prod_webapp:latest") 
 
 db-session:
 	docker exec -it libreg_local_db psql -U postgres
