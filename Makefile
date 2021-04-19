@@ -1,4 +1,4 @@
-.PHONY: help build db-session webapp-shell up up-watch start stop down test clean full-clean
+.PHONY: help build build-prod db-session webapp-shell up up-watch start stop down test clean full-clean
 .DEFAULT_GOAL := help
 
 help:
@@ -20,6 +20,12 @@ help:
 
 build:
 	docker-compose build
+
+build-prod:
+	docker-compose -f docker-compose-cicd.yml build
+
+tag-prod:
+    docker tag $(docker image ls -q --filter="dangling=false" --filter="label=com.nypl.docker.imagename=library_registry" --filter="reference=*libreg_prod_webapp:latest") 
 
 db-session:
 	docker exec -it libreg_local_db psql -U postgres
