@@ -19,8 +19,6 @@ ENV POSTGRES_PASSWORD="password"
 ENV POSTGRES_USER="postgres"
 
 COPY ./docker/postgis_init.sh /docker-entrypoint-initdb.d/postgis-init.sh
-
-EXPOSE 5432
 ##############################################################################
 
 
@@ -177,6 +175,8 @@ ENV SIMPLYE_RUN_WEBPACK_WATCH 1
 ENV TESTING 1
 
 RUN apk add --no-cache npm
+
+COPY ./docker/check-db-conn.py /check-db-conn.py
 ##############################################################################
 
 
