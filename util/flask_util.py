@@ -8,14 +8,15 @@ from . import problem_detail
 from .language import languages_from_accept
 
 
-IPV4_REGEX = re.compile(r"""(?P<address>              # entire address, capturing
+IPV4_REGEX = re.compile(r"""(?<![0-9])                # Preceding character if any may not be numeric
+                            (?P<address>              # entire address, capturing
                             (?:                       # quads 1-3 and separator, non-capturing
                                 (?:                   # quad value, non-capturing
-                                    25[0-5]       |   # triple digit 250-255
-                                    2[0-4][0-9]   |   # triple digit 200-249
-                                    1[0-9]{2}     |   # triple digit 100-199
+                                    [0-9]         |   # single digit   0-9
                                     [1-9][0-9]    |   # double digit  10-99
-                                    [0-9]             # single digit   0-9
+                                    1[0-9]{2}     |   # triple digit 100-199
+                                    2[0-4][0-9]   |   # triple digit 200-249
+                                    25[0-5]           # triple digit 250-255
                                 )\.                   # dot separator
                             ){3}
                             (?:                       # quad 4, non-capturing
@@ -26,6 +27,7 @@ IPV4_REGEX = re.compile(r"""(?P<address>              # entire address, capturin
                                 [0-9]                 # single digit   0-9
                             )
                           )
+                          (?![0-9])                   # trailing character if any may not be numeric
                           """, re.VERBOSE)
 
 
