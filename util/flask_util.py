@@ -8,25 +8,6 @@ from . import problem_detail
 from .language import languages_from_accept
 
 
-def is_public_ipv4_address(ip_string):
-    """Whether a given IPv4 address (either string or ipaddress.IPv4Address) is publicly routable"""
-    if not isinstance(ip_string, ipaddress.IPv4Address):
-        try:
-            ip_string = ipaddress.ip_address(ip_string)
-        except ValueError:
-            pass             # TODO: Log it. Some caller is passing bad values to this fn.
-            return None      # incoming value couldn't be coerced to an IPv4Address object
-
-    return bool(
-        ip_string.is_private     is False and     # noqa: E272
-        ip_string.is_multicast   is False and     # noqa: E272
-        ip_string.is_unspecified is False and     # noqa: E272
-        ip_string.is_reserved    is False and     # noqa: E272
-        ip_string.is_loopback    is False and     # noqa: E272
-        ip_string.is_link_local  is False         # noqa: E272
-    )
-
-
 IPV4_REGEX = re.compile(r"""(?P<address>              # entire address, capturing
                             (?:                       # quads 1-3 and separator, non-capturing
                                 (?:                   # quad value, non-capturing
@@ -66,6 +47,25 @@ def languages_for_request():
     return languages_from_accept(request.accept_languages)
 
 
+def is_public_ipv4_address(ip_string):
+    """Whether a given IPv4 address (either string or ipaddress.IPv4Address obj) is publicly routable"""
+    if not isinstance(ip_string, ipaddress.IPv4Address):
+        try:
+            ip_string = ipaddress.ip_address(ip_string)
+        except ValueError:
+            pass             # TODO: Log it. Some caller is passing bad values to this fn.
+            return None      # incoming value couldn't be coerced to an IPv4Address object
+
+    return bool(
+        ip_string.is_private     is False and     # noqa: E272
+        ip_string.is_multicast   is False and     # noqa: E272
+        ip_string.is_unspecified is False and     # noqa: E272
+        ip_string.is_reserved    is False and     # noqa: E272
+        ip_string.is_loopback    is False and     # noqa: E272
+        ip_string.is_link_local  is False         # noqa: E272
+    )
+
+
 def originating_ip():
     """
     Attempt to derive the client's IPv4 address from the flask.request object.
@@ -82,7 +82,7 @@ def originating_ip():
     forwarded_for = request.headers.get('X-Forwarded-For', None)
 
     if not forwarded_for and not request.remote_addr:
-        return None     # Nothing to go on from the request object
+        return None     # Nothing to go on from either headers or remote_addr
 
     client_ip = None
 
@@ -97,6 +97,7 @@ def originating_ip():
                 client_ip = ip
                 break
 
+    # If we don't have an IP from the forwarded header, try getting it from remote_addr
     if not client_ip and request.remote_addr:
         if is_public_ipv4_address(request.remote_addr):
             client_ip = request.remote_addr
