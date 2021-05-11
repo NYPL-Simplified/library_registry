@@ -850,7 +850,7 @@ class TestLibrary(DatabaseTest):
         # We know about three libraries.
         nypl = self.nypl
         kansas_state = self.kansas_state_library
-        connecticut_state = self.connecticut_state_library  # noqa: F841
+        connecticut_state = self.connecticut_state_library      # noqa: F841
 
         # The NYPL explicitly covers New York City, which has
         # 'Manhattan' as an alias.
@@ -862,7 +862,7 @@ class TestLibrary(DatabaseTest):
         [kansas] = [x.place for x in kansas_state.service_areas]
         assert kansas.external_name == "Kansas"
         assert kansas.type == Place.STATE
-        manhattan_ks = self.manhattan_ks        # noqa: F841
+        manhattan_ks = self.manhattan_ks                        # noqa: F841
 
         # A search for 'manhattan' finds both libraries.
         libraries = list(Library.search_by_location_name(self._db, "manhattan"))
@@ -921,8 +921,9 @@ class TestLibrary(DatabaseTest):
         # Levenshtein distance from "New York" is 2.
         new_work = self._library(name="Now Work", focus_areas=[self.kansas_state])
 
-        # Here's a library whose service area includes a place called "New York".
-        nypl = self.nypl    # noqa: F841
+        # Here's a library whose service area includes a place called
+        # "New York".
+        nypl = self.nypl        # noqa: F841
 
         libraries = Library.search(self._db, (40.7, -73.9), "NEW YORK")
         # Even though NYPL is closer to the current location, the
