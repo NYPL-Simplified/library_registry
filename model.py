@@ -6,7 +6,7 @@ import re
 import string
 import uuid
 import warnings
-from collections import Counter, defaultdict
+from collections import defaultdict
 
 import uszipcode
 from flask_babel import lazy_gettext as _
@@ -26,8 +26,7 @@ from sqlalchemy.orm import (aliased, backref, relationship, sessionmaker,
 from sqlalchemy.orm.exc import MultipleResultsFound, NoResultFound
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql import compiler
-from sqlalchemy.sql.expression import (and_, case, cast, join, literal_column,
-                                       or_, outerjoin, select)
+from sqlalchemy.sql.expression import (and_, cast, or_, select)
 
 from config import Configuration
 from emailer import Emailer

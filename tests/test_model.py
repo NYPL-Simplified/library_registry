@@ -1,10 +1,8 @@
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm.exc import MultipleResultsFound
-import base64
 import datetime
 import json
-import operator
 import random
 
 import pytest
@@ -13,7 +11,6 @@ from config import Configuration
 from emailer import Emailer
 from model import (
     create,
-    get_one,
     get_one_or_create,
     Admin,
     Audience,
@@ -82,11 +79,14 @@ class TestPlace(DatabaseTest):
             lake_placid.geometry, Place.geometry
         )
         places = self._db.query(Place).filter(
-            Place.type==Place.STATE).order_by(distance).add_columns(distance)
+            Place.type == Place.STATE).order_by(distance).add_columns(distance)
 
         # We can find the distance in kilometers between the 'Lake
         # Placid' point and the points representing the other states.
-        assert [(x[0].external_name, int(x[1]/1000)) for x in places] == [("New York", 172), ("Connecticut", 285), ("New Mexico", 2993)]
+        assert [
+                    (x[0].external_name, int(x[1]/1000))
+                    for x in places
+               ] == [("New York", 172), ("Connecticut", 285), ("New Mexico", 2993)]
 
     def test_aliases(self):
         new_york, is_new = get_one_or_create(
@@ -198,11 +198,11 @@ class TestPlace(DatabaseTest):
                             type=Place.STATE, parent=nation)
         assert "Alabama" == state.human_friendly_name
 
-        city = self._place(external_name="Montgomery", type=Place.CITY, 
+        city = self._place(external_name="Montgomery", type=Place.CITY,
                            parent=state)
         assert "Montgomery, AL" == city.human_friendly_name
 
-        county = self._place(external_name="Montgomery", type=Place.COUNTY, 
+        county = self._place(external_name="Montgomery", type=Place.COUNTY,
                              parent=state)
         assert "Montgomery County, AL" == county.human_friendly_name
 
@@ -218,7 +218,7 @@ class TestPlace(DatabaseTest):
 
         # 'everywhere' is not a distinct place with a well-known name.
         everywhere = self._place(type=Place.EVERYWHERE)
-        assert None == everywhere.human_friendly_name
+        assert everywhere.human_friendly_name is None
 
     def test_lookup_by_name(self):
 
@@ -236,7 +236,7 @@ class TestPlace(DatabaseTest):
         # To get Santa Barbara County, we have to refer to
         # "Santa Barbara County"
         assert m(self._db, "Santa Barbara County").all() == [sb_county]
-        
+
     def test_lookup_inside(self):
         us = self.crude_us
         zip_10018 = self.zip_10018
@@ -244,7 +244,6 @@ class TestPlace(DatabaseTest):
         new_york = self.new_york_state
         connecticut = self.connecticut_state
         manhattan_ks = self.manhattan_ks
-        kansas = manhattan_ks.parent
         kings_county = self.crude_kings_county
         zip_12601 = self.zip_12601
 
@@ -431,7 +430,7 @@ class TestLibrary(DatabaseTest):
         assert lib.short_name == "ABCD"
         try:
             lib.short_name = 'ab|cd'
-            raise Error("Expected exception not raised.")
+            raise Exception("Expected exception not raised.")
         except ValueError as e:
             assert str(e) == 'Short name cannot contain the pipe character.'
 
@@ -456,10 +455,11 @@ class TestLibrary(DatabaseTest):
 
         # Reset the random seed so the same name will be generated again.
         random.seed(42)
-        # Create a duplicate_check implementation that claims QAHFTR
-        # has already been used.
+
+        # Create a duplicate_check implementation that claims QAHFTR has already been used.
         def already_used(name):
             return name == expect
+
         name = Library.random_short_name(duplicate_check=already_used)
 
         # random_short_name now generates `expect`, but it's a
@@ -658,7 +658,7 @@ class TestLibrary(DatabaseTest):
             "Internet Archive", eligibility_areas=[everywhere],
             focus_areas=[everywhere]
         )
-        assert None == library.service_area_name
+        assert library.service_area_name is None
 
         # A library with a single eligibility area has a
         # straightforward name.
@@ -697,7 +697,7 @@ class TestLibrary(DatabaseTest):
             "test library", eligibility_areas=[everywhere, new_york, zip],
             focus_areas=[nyc, zip, everywhere]
         )
-        assert None == library.service_area_name
+        assert library.service_area_name is None
 
     def test_nearby(self):
         # Create two libraries. One serves New York City, and one serves
@@ -747,8 +747,8 @@ class TestLibrary(DatabaseTest):
                 self._db, (41.3, -73.3), production=production
             ).count()
         # Take all the libraries we found earlier out of production.
-        for l in ct_state, nypl:
-            l.registry_stage = Library.TESTING_STAGE
+        for lib in ct_state, nypl:
+            lib.registry_stage = Library.TESTING_STAGE
         # Now there are no results.
         assert m(True) == 0
 
@@ -818,24 +818,29 @@ class TestLibrary(DatabaseTest):
                 self._db, LibraryAlias, name="BPL", language=None,
                 library=library
             )
-        assert set(search("bpl")) == set([brooklyn, boston]) 
-        
+        assert set(search("bpl")) == set([brooklyn, boston])
+
         # We do not tolerate typos in short names, because the chance of
         # ambiguity is so high.
         assert search("opl") == []
 
         # If we're searching for "BPL" from California, Brooklyn shows
         # up first, because it's closer to California.
-        assert [x[0].name for x in search("bpl", GeometryUtility.point(35, -118))] == ["Brooklyn Public Library", "Boston Public Library"]
+        assert [
+                x[0].name
+                for x in search("bpl", GeometryUtility.point(35, -118))
+               ] == ["Brooklyn Public Library", "Boston Public Library"]
 
         # If we're searching for "BPL" from Maine, Boston shows
         # up first, because it's closer to Maine.
-        assert [x[0].name for x in search("bpl", GeometryUtility.point(43, -70))] == ["Boston Public Library", "Brooklyn Public Library"]
+        assert [
+                x[0].name for x in search("bpl", GeometryUtility.point(43, -70))
+               ] == ["Boston Public Library", "Brooklyn Public Library"]
 
         # By default, search_by_library_name() only finds libraries
         # in production. Put them in the TESTING stage and they disappear.
-        for l in (brooklyn, boston):
-            l.registry_stage = Library.TESTING_STAGE
+        for lib in (brooklyn, boston):
+            lib.registry_stage = Library.TESTING_STAGE
         assert search("bpl", production=True) == []
 
         # But you can find them by passing in production=False.
@@ -845,7 +850,7 @@ class TestLibrary(DatabaseTest):
         # We know about three libraries.
         nypl = self.nypl
         kansas_state = self.kansas_state_library
-        connecticut_state = self.connecticut_state_library
+        connecticut_state = self.connecticut_state_library  # noqa: F841
 
         # The NYPL explicitly covers New York City, which has
         # 'Manhattan' as an alias.
@@ -857,7 +862,7 @@ class TestLibrary(DatabaseTest):
         [kansas] = [x.place for x in kansas_state.service_areas]
         assert kansas.external_name == "Kansas"
         assert kansas.type == Place.STATE
-        manhattan_ks = self.manhattan_ks
+        manhattan_ks = self.manhattan_ks        # noqa: F841
 
         # A search for 'manhattan' finds both libraries.
         libraries = list(Library.search_by_location_name(self._db, "manhattan"))
@@ -894,10 +899,12 @@ class TestLibrary(DatabaseTest):
         assert brooklyn_results[0] == nypl
 
         nypl.registry_stage = Library.TESTING_STAGE
-        assert Library.search_by_location_name(self._db, "brooklyn", here=GeometryUtility.point(43, -70), production=True).all() == []
-        
-        assert Library.search_by_location_name(self._db, "brooklyn", here=GeometryUtility.point(43, -70), production=False).count() == 1
-        
+        assert Library.search_by_location_name(
+            self._db, "brooklyn", here=GeometryUtility.point(43, -70), production=True).all() == []
+
+        assert Library.search_by_location_name(
+            self._db, "brooklyn", here=GeometryUtility.point(43, -70), production=False).count() == 1
+
     def test_search_within_description(self):
         """Test searching for a phrase within a library's description."""
         library = self._library(
@@ -914,9 +921,8 @@ class TestLibrary(DatabaseTest):
         # Levenshtein distance from "New York" is 2.
         new_work = self._library(name="Now Work", focus_areas=[self.kansas_state])
 
-        # Here's a library whose service area includes a place called
-        # "New York".
-        nypl = self.nypl
+        # Here's a library whose service area includes a place called "New York".
+        nypl = self.nypl    # noqa: F841
 
         libraries = Library.search(self._db, (40.7, -73.9), "NEW YORK")
         # Even though NYPL is closer to the current location, the
@@ -943,6 +949,7 @@ class TestLibrary(DatabaseTest):
         # By default, search() only finds libraries in production.
         self.nypl.registry_stage = Library.TESTING_STAGE
         new_work.registry_stage = Library.TESTING_STAGE
+
         def m(production):
             return len(
                 Library.search(
@@ -989,13 +996,13 @@ class TestCollectionSummary(DatabaseTest):
         assert summary.size == 100
 
     def test_size_must_be_integerable(self):
-        library  = self._library()
+        library = self._library()
         with pytest.raises(ValueError) as exc:
             CollectionSummary.set(library, "eng", "fruit")
         assert "invalid literal for" in str(exc.value)
 
     def test_negative_size_is_not_allowed(self):
-        library  = self._library()
+        library = self._library()
         with pytest.raises(ValueError) as exc:
             CollectionSummary.set(library, "eng", "-1")
         assert "Collection size cannot be negative." in str(exc.value)
@@ -1014,8 +1021,10 @@ class TestDelegatedPatronIdentifier(DatabaseTest):
         library = self._library()
         patron_identifier = self._str
         identifier_type = DelegatedPatronIdentifier.ADOBE_ACCOUNT_ID
+
         def make_id():
             return "id1"
+
         identifier, is_new = DelegatedPatronIdentifier.get_one_or_create(
             self._db, library, patron_identifier, identifier_type,
             make_id
@@ -1038,6 +1047,7 @@ class TestDelegatedPatronIdentifier(DatabaseTest):
         assert identifier.id == identifier2.id
         # id_2() was not called.
         assert identifier2.delegated_identifier == "id1"
+
 
 class TestExternalIntegration(DatabaseTest):
 
@@ -1084,6 +1094,7 @@ somesetting='somevalue'""" % integration.id
         # If we pass in True for include_secrets, we see the passwords.
         with_secrets = integration.explain(include_secrets=True)
         assert "password='somepass'" in with_secrets
+
 
 class TestConfigurationSetting(DatabaseTest):
 
@@ -1251,7 +1262,7 @@ class TestConfigurationSetting(DatabaseTest):
         assert jsondata.int_value is None
 
         jsondata.value = "[1,2]"
-        assert jsondata.json_value == [1,2]
+        assert jsondata.json_value == [1, 2]
 
         jsondata.value = "tra la la"
         with pytest.raises(ValueError):
@@ -1404,7 +1415,7 @@ class TestValidation(DatabaseTest):
         # Let's imagine that validation succeeded and is being
         # invalidated for some reason.
         email_validation.success = True
-        old_started_at = email_validation.started_at
+        old_started_at = email_validation.started_at        # noqa: F841
         old_secret = email_validation.secret
         email_validation_2 = email.restart_validation()
 
