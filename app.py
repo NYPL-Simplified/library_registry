@@ -56,9 +56,7 @@ def set_secret_key(_db=None):
 
 @app.teardown_request
 def shutdown_session(exception):
-    """Commit or rollback the database session associated with
-    the request.
-    """
+    """Commit or rollback the database session associated with the request."""
     if (
         hasattr(app, 'library_registry',) and
         hasattr(app.library_registry, '_db') and
@@ -81,9 +79,7 @@ def nearby(_location):
 @uses_location
 @returns_problem_detail
 def nearby_qa(_location):
-    return app.library_registry.registry_controller.nearby(
-        _location, live=False
-    )
+    return app.library_registry.registry_controller.nearby(_location, live=False)
 
 
 @app.route("/register", methods=["GET", "POST"])
@@ -103,17 +99,13 @@ def search(_location):
 @uses_location
 @returns_problem_detail
 def search_qa(_location):
-    return app.library_registry.registry_controller.search(
-        _location, live=False
-    )
+    return app.library_registry.registry_controller.search(_location, live=False)
 
 
 @app.route('/confirm/<int:resource_id>/<secret>')
 @returns_problem_detail
 def confirm_resource(resource_id, secret):
-    return app.library_registry.validation_controller.confirm(
-        resource_id, secret
-    )
+    return app.library_registry.validation_controller.confirm(resource_id, secret)
 
 
 @app.route('/libraries')
