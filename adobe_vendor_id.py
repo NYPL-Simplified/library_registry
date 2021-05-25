@@ -53,7 +53,7 @@ class AdobeVendorIDController(object):
 
 class AdobeRequestParser(XMLParser):
 
-    NAMESPACES = { "adept" : "http://ns.adobe.com/adept" }
+    NAMESPACES = {"adept": "http://ns.adobe.com/adept"}
 
     def process(self, data):
         requests = list(self.process_all(

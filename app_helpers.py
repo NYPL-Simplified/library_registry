@@ -1,49 +1,57 @@
-import flask
 import gzip
+from flask import g, request, after_this_request
 from io import BytesIO
 from functools import wraps
 
 from util import GeometryUtility
+from util.geo import Location, InvalidLocationException
 from util.problem_detail import ProblemDetail
 from util.flask_util import originating_ip
 
+
 def has_library_factory(app):
-    """Create a decorator that extracts a library uuid from request arguments.
-    """
+    """Create a decorator that extracts a library uuid from request arguments"""
     def factory(f):
         @wraps(f)
         def decorated(*args, **kwargs):
-            """A decorator that extracts a library UUID from request
-            arguments.
-            """
-            if 'uuid' in kwargs:
-                uuid = kwargs.pop("uuid")
-            else:
-                uuid = None
-            library = app.library_registry.registry_controller.library_for_request(
-                uuid
-            )
+            """A decorator that extracts a library UUID from request arguments"""
+            uuid = kwargs.pop("uuid", None)
+            library = app.library_registry.registry_controller.library_for_request(uuid)
+
             if isinstance(library, ProblemDetail):
                 return library.response
             else:
                 return f(*args, **kwargs)
+
         return decorated
     return factory
 
+
 def uses_location_factory(app):
-    """Create a decorator that guesses at a location for the client.
-    """
+    """Create a decorator that guesses at a location for the client"""
     def factory(f):
         @wraps(f)
         def decorated(*args, **kwargs):
             """A decorator that guesses at a location for the client."""
-            location = flask.request.args.get("_location")
-            if location:
-                location = GeometryUtility.point_from_string(location)
-            if not location:
-                ip = originating_ip()
-                location = GeometryUtility.point_from_ip(ip)
-            return f(*args,  _location=location, **kwargs)
+            raw_location = request.args.get("_location")
+            location_obj = None
+
+            if raw_location:
+                try:
+                    location_obj = Location(raw_location)
+                except InvalidLocationException:
+                    pass
+
+            if not location_obj:
+                try:
+                    location_obj = Location(GeometryUtility.point_from_ip(originating_ip()))
+                except InvalidLocationException:
+                    pass
+
+            if isinstance(location_obj, Location):
+                g.location = location_obj
+
+            return f(*args, **kwargs)
         return decorated
     return factory
 
@@ -63,22 +71,17 @@ def compressible(f):
     """
     @wraps(f)
     def compressor(*args, **kwargs):
-        @flask.after_this_request
+        @after_this_request
         def compress(response):
-            if (response.status_code < 200 or
-                response.status_code >= 300 or
-                'Content-Encoding' in response.headers):
-                # Don't encode anything other than a 2xx response
-                # code. Don't encode a response that's
-                # already been encoded.
+            if (response.status_code < 200 or response.status_code >= 300 or 'Content-Encoding' in response.headers):
+                # Don't encode anything other than a 2xx. Don't encode a response that's already been encoded.
                 return response
 
-            accept_encoding = flask.request.headers.get('Accept-Encoding', '')
-            if not 'gzip' in accept_encoding.lower():
+            accept_encoding = request.headers.get('Accept-Encoding', '')
+            if 'gzip' not in accept_encoding.lower():
                 return response
 
-            # At this point we know we're going to be changing the
-            # outgoing response.
+            # At this point we know we're going to be changing the outgoing response.
 
             # TODO: I understand what direct_passthrough does, but am
             # not sure what it has to do with this, and commenting it

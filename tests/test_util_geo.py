@@ -121,6 +121,34 @@ class TestLocation:
             Location((89.5, 195.5))         # Invalid longitude
 
     @pytest.mark.parametrize(
+        "location_one,location_two,result",
+        [
+            pytest.param(
+                'POINT(-129.000001 38.000001)', 'POINT(-129.000002 38.000002)', False, id="unequal_last_digit"
+            ),
+            pytest.param(
+                'POINT(-129.000001 38.000001)', 'POINT(-129.000001 38.000001)', True, id="equal_to_six_digits"
+            ),
+            pytest.param(
+                'POINT(-129 38)', 'POINT(-129.0 38.0)', True, id="integer_input"
+            ),
+            pytest.param(
+                'POINT(-129.0000036 38.0000036)', 'POINT(-129.0000039 38.0000039)', True, id="rounding_seven_digits"
+            )
+        ]
+    )
+    def test_equality(self, location_one, location_two, result):
+        """
+        GIVEN: Two objects, at least one of which is a Location
+        WHEN:  They are compared using the == equality operator
+        THEN:  The boolean value returned by the comparison should be True if:
+                * Both objects are Location instances
+                * The latitude and longitude of the instances are the same
+                  when rounded to six digits of precision.
+        """
+        assert bool(Location(location_one) == Location(location_two)) is result
+
+    @pytest.mark.parametrize(
         "location,result",
         [
             pytest.param((34.03, -139.64), True, id="pacific_ocean_1"),

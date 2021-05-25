@@ -78,6 +78,22 @@ class Location:
     def __repr__(self):
         return f"<Location: latitude={self.latitude}, longitude={self.longitude}, srid={self.srid}>"
 
+    def __eq__(self, other):
+        """
+        Locations are considered equal for our purposes if their latitude and longitude
+        match to 6 digits of precision.
+        """
+        if not isinstance(other, Location):
+            return False
+
+        if (
+            round(self.latitude, 6) == round(other.latitude, 6) and
+            round(self.longitude, 6) == round(other.longitude, 6)
+        ):
+            return True
+        else:
+            return False
+
     @classmethod
     def normalize_location_input(cls, location):
         """

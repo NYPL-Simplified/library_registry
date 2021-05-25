@@ -1,8 +1,9 @@
 import contextlib
 import copy
-import json
 import os
 import logging
+from pathlib import Path
+
 
 @contextlib.contextmanager
 def temp_config(new_config=None, replacement_classes=None):
@@ -18,10 +19,13 @@ def temp_config(new_config=None, replacement_classes=None):
         for c in replacement_classes:
             c.instance = old_config
 
+
 class CannotLoadConfiguration(Exception):
     pass
 
+
 class Configuration(object):
+    DATADIR = Path(os.path.dirname(__file__)) / 'data'
 
     instance = None
 
@@ -84,7 +88,7 @@ class Configuration(object):
         url = os.environ.get(environment_variable)
         if not url:
             raise CannotLoadConfiguration(
-                "Database URL was not defined in environment variable (%s) or configuration file." % environment_variable
+                f"Database URL was not defined in environment variable ({environment_variable}) or configuration file."
             )
         return url
 
@@ -105,7 +109,7 @@ class Configuration(object):
         delegates = []
         try:
             delegates = setting.json_value or []
-        except ValueError as e:
+        except ValueError:
             cls.log.warn("Invalid Adobe Vendor ID delegates configured.")
 
         node = integration.setting(cls.ADOBE_VENDOR_ID_NODE_VALUE).value

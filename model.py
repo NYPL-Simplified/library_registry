@@ -28,10 +28,20 @@ from sqlalchemy.orm.session import Session
 from sqlalchemy.sql import compiler
 from sqlalchemy.sql.expression import (and_, cast, or_, select)
 
+from constants import (
+    PLACE_CITY,
+    PLACE_COUNTY,
+    PLACE_EVERYWHERE,
+    PLACE_LIBRARY_SERVICE_AREA,
+    PLACE_NATION,
+    PLACE_POSTAL_CODE,
+    PLACE_STATE,
+)
 from config import Configuration
 from emailer import Emailer
 from util import GeometryUtility
 from util.language import LanguageCodes
+from util.search import LibrarySearchQuery
 from util.short_client_token import ShortClientTokenTool
 from util.string_helpers import random_string
 
@@ -162,6 +172,38 @@ class SessionManager:
         pass
 
 
+class LibraryType(object):
+    """Constant container for library types.
+    This is as defined here:
+    https://github.com/NYPL-Simplified/Simplified/wiki/LibraryRegistryPublicAPI#the-subject-scheme-for-library-types
+    """
+
+    SCHEME_URI = "http://librarysimplified.org/terms/library-types"
+    LOCAL = "local"
+    COUNTY = "county"
+    STATE = "state"
+    PROVINCE = "province"
+    NATIONAL = "national"
+    UNIVERSAL = "universal"
+
+    # Different nations use different terms for referring to their
+    # administrative divisions, which translates into different terms in
+    # the library type vocabulary.
+    ADMINISTRATIVE_DIVISION_TYPES = {
+        "US": STATE,
+        "CA": PROVINCE,
+    }
+
+    NAME_FOR_CODE = {
+        LOCAL: "Local library",
+        COUNTY: "County library",
+        STATE: "State library",
+        PROVINCE: "Provincial library",
+        NATIONAL: "National library",
+        UNIVERSAL: "Online library",
+    }
+
+
 class Library(Base):
     """
     A Library typically represents an OPDS server.
@@ -256,9 +298,13 @@ class Library(Base):
     PRODUCTION_STAGE    = 'production'  # Library should show up in production feed     # noqa: E221
     CANCELLED_STAGE     = 'cancelled'   # Library should not show up in any feed        # noqa: E221
     PLS_ID              = "pls_id"      # Public Library Surveys ID                     # noqa: E221
-    US_ZIP_REGEX        = re.compile("^[0-9]{5}$")                                      # noqa: E221
-    US_ZIP4_REGEX       = re.compile("^[0-9]{5}-[0-9]{4}$")                             # noqa: E221
     WHITESPACE_REGEX    = re.compile(r"\s+")                                            # noqa: E221
+
+    SUPRALOCAL_PLACE_TYPES = (
+        PLACE_STATE,
+        PLACE_NATION,
+        PLACE_EVERYWHERE,
+    )
 
     ##### Public Interface / Magic Methods ###################################  # noqa: E266
     def set_hyperlink(self, rel, *hrefs):
@@ -418,16 +464,6 @@ class Library(Base):
         return get_one(_db, Library, internal_urn=urn)
 
     @classmethod
-    def as_postal_code(cls, query):
-        """Try to interpret a query as a postal code."""
-        if cls.US_ZIP_REGEX.match(query):
-            return query
-        elif cls.US_ZIP4_REGEX.match(query):
-            return query[:5]
-        else:
-            return None
-
-    @classmethod
     def random_short_name(cls, duplicate_check=None, max_attempts=20):
         """Generate a random short name for a library.
 
@@ -440,10 +476,10 @@ class Library(Base):
         """
         attempts = 0
         choice = None
-        while choice is None and attempts < max_attempts:
+        while not choice and attempts < max_attempts:
             choice = "".join([random.choice(string.ascii_uppercase) for i in range(6)])
 
-            if duplicate_check and duplicate_check(choice):
+            if callable(duplicate_check) and duplicate_check(choice):
                 choice = None
 
             attempts += 1
@@ -454,58 +490,113 @@ class Library(Base):
         return choice
 
     @classmethod
-    def nearby(cls, _db, target, max_radius=150, production=True):
-        """Find libraries whose service areas include or are close to the
-        given point.
-
-        :param target: The starting point. May be a Geometry object or
-         a 2-tuple (latitude, longitude).
-        :param max_radius: How far out from the starting point to search
-            for a library's service area, in kilometers.
-        :param production: If True, only libraries that are ready for
-            production are shown.
-
-        :return: A database query that returns lists of 2-tuples
-        (library, distance from starting point). Distances are
-        measured in meters.
+    def nearby(cls, db_session, target, max_radius=150, production=True):
         """
-        # We start with a single point on the globe. Call this Point
-        # A.
-        if isinstance(target, tuple):
-            target = GeometryUtility.point(*target)
-        target_geography = cast(target, Geography)
+        Return an SQLAlchemy Query object representing a search for all Libraries
+        with ServiceArea Places whose geometric representations are fully or
+        partially inside a circle of a given radius.
 
-        # Find another point on the globe that's 150 kilometers
-        # northeast of Point A. Call this Point B.
-        other_point = func.ST_Project(
-            target_geography, max_radius*1000, func.radians(90.0)
-        )
-        other_point = cast(other_point, Geometry)
+        IMPORTANT! If you are editing this function, you have to be very careful
+        about the difference between PostGIS Geometry and Geography data types.
+        Many PostGIS functions can take either Geometry or Geography arguments,
+        but change their behavior and return value based on the type provided.
 
-        # Determine the distance between Point A and Point B, in
-        # radians. (150 kilometers is a different number of radians in
-        # different parts of the world.)
-        distance_to_other_point = func.ST_Distance(target, other_point)
+        For background, look at chapters 9 (Geometries) and 11 (Geographies) here:
 
-        # Find all Places that are no further away from A than that
-        # number of radians.
-        nearby = func.ST_DWithin(target,
-                                 Place.geometry,
-                                 distance_to_other_point)
+            http://postgis.net/workshops/postgis-intro/index.html
 
-        # For each library served by such a place, calculate the
-        # minimum distance between the library's service area and
-        # Point A in meters.
-        min_distance = func.min(func.ST_DistanceSphere(target, Place.geometry))
+        The TL;DR:
+            * A Geometry is fundamentally Cartesian, and describes positions on
+              a plane. Sort of. Except when the Spatial Reference Identifier (SRID)
+              has native units which are are radian based, as with SRID 4326.
+            * A Geography is fundamentally non-Euclidean, and describes positions
+              on a globe, which may be a spheroid whose deformation is indicated
+              by the SRID of the data, or a sphere for faster calculations.
+            * It's kind of ridiculously complicated. Tread with caution and use
+              comprehensive unit tests, because the errors are often tricky to catch.
 
-        qu = _db.query(Library).join(Library.service_areas).join(
-            ServiceArea.place)
-        qu = qu.filter(cls._feed_restriction(production))
-        qu = qu.filter(nearby)
-        qu = qu.add_columns(
-                min_distance).group_by(Library.id).order_by(
-                min_distance.asc())
-        return qu
+        Notes:
+            * Results will be sorted in ascending distance order
+            * Distances are calculated from the supplied point target to the nearest
+              edge or vertex of the Place geometry
+            * Distances are returned in meters
+
+        params:
+            target - a util.geo.Location object
+            max_radius - search radius in kilometers
+        """
+        # Step 1: Establish a localized value for the search radius, in radians.
+        #         Latitude and longitude are angle measures, so we need to work
+        #         in radians. Because lat/long describe points on a non-cartesian
+        #         surface, the number of kilometers a radian describes is different
+        #         as you move north and south, since lines of longitude converge
+        #         at the poles.
+        radius_in_meters   = max_radius * 1000.0                # noqa: E221
+        northeast_angle    = func.radians(45.0)                 # noqa: E221  # Radian angle from north (0), clockwise
+        target_geometry    = cast(target.ewkt, Geometry)        # noqa: E221  # ST_Distance wants a geometry
+        target_geography   = cast(target.ewkt, Geography)       # noqa: E221  # ST_Project wants a geography
+        northeast_ref_pt   = func.ST_Project(target_geography, radius_in_meters, northeast_angle)  # noqa: E221
+        ne_ref_pt_geom     = cast(northeast_ref_pt, Geometry)   # noqa: E221
+
+        # This MUST have two Geometry parameters. If it uses Geography the distance returned
+        # will be in meters, NOT radians.
+        local_dist_in_rads = func.ST_Distance(target_geometry, ne_ref_pt_geom)
+
+        # Step 2: Use the localized value to set up a geometry-based radius function
+        #         that's locally accurate (for rough values of 'accurate'). This will
+        #         let us limit our search to Places no further than max_radius km from
+        #         our target location.
+        within_max_radius = func.ST_DWithin(target_geometry, Place.geometry, local_dist_in_rads)
+
+        # Step 3: Set up a function to find the minimum distance between the
+        #         target (a point), and an edge of the Place objects we want
+        #         to search, which are typically polygons. We won't restrict
+        #         the query on this, but we do want to return it as a column,
+        #         and use it to order results.
+        meters_to_near_edge = func.min(func.ST_DistanceSphere(target_geometry, Place.geometry))
+
+        # Step 4: Establish the query object, and restrict it to the right feed.
+        #         We only want to search against the geometry of Place objects which
+        #         are used as the service area of one or more Libraries, to avoid
+        #         searching against all Places loaded in the database, so we join
+        #         Library -> ServiceArea -> Place.
+        query_obj = db_session.query(Library).join(Library.service_areas).join(ServiceArea.place)
+        query_obj = query_obj.filter(cls._feed_restriction(production))
+
+        # Step 5: Use our radius function to add a WHERE clause, so that we return
+        #         only Library objects within the max_radius in km.
+        query_obj = query_obj.filter(within_max_radius)
+
+        # Step 6: Add the distance from our target point to the near edge as a
+        #         column in the output, group our results by Library, and then
+        #         use the point-to-polygon-edge distance to order our result set.
+        query_obj = query_obj.add_columns(meters_to_near_edge)
+        query_obj = query_obj.group_by(Library.id)
+        query_obj = query_obj.order_by(meters_to_near_edge.asc())
+
+        return query_obj
+
+    @classmethod
+    def nearest_by_types(cls, db_session, target, place_types, max_radius=150, production=True):
+        """Return Libraries within max_radius, filtered by a list of place types"""
+        return cls.nearby(db_session, target, max_radius, production).filter(Place.type.in_(place_types))
+
+    @classmethod
+    def nearest_supralocals(cls, db_session, target, max_radius=500, production=True):
+        """
+        Find the nearest 'supralocal' Libraries, where supralocal means a Library with a
+        service area whose place type is one of Place.STATE, Place.NATION, or Place.EVERYWHERE.
+        """
+        return cls.nearest_by_types(db_session=db_session, target=target,
+                                    place_types=cls.SUPRALOCAL_PLACE_TYPES,
+                                    max_radius=max_radius, production=production)
+
+    @classmethod
+    def search_new(cls, db_session, query_string, location=None, production=True):
+        sq_obj = LibrarySearchQuery(query_string)
+
+        if not sq_obj and not location:
+            return []       # We don't have a valid search or a known user location, nothing to do
 
     @classmethod
     def search(cls, _db, target, query, production=True):
@@ -797,212 +888,263 @@ class ServiceArea(Base):
 
 
 class Place(Base):
-    __tablename__ = 'places'
+    """
+    A location on the earth, with a defined geometry.
 
-    # These are the kinds of places we keep track of. These are not
-    # supposed to be precise terms. Each census-designated place is
-    # called a 'city', even if it's not a city in the legal sense.
-    # Countries that call their top-level administrative divisions something
-    # other than 'states' can still use 'state' as their type.
-    NATION = 'nation'
-    STATE = 'state'
-    COUNTY = 'county'
-    CITY = 'city'
-    POSTAL_CODE = 'postal_code'
-    LIBRARY_SERVICE_AREA = 'library_service_area'
-    EVERYWHERE = 'everywhere'
+    Notes:
+        * Regarding the place type constants, (NATION, CITY, etc.):
+            * These are the kinds of places we keep track of. These are not supposed to be precise terms.
+            * Each census-designated place is called a 'city', even if it's not a city in the legal sense.
+            * Countries that call their top-level administrative divisions something other than 'states'
+              can still use 'state' as their type.
 
-    id = Column(Integer, primary_key=True)
+    Place attributes/columns:
 
-    # The type of place.
-    type = Column(Unicode(255), index=True, nullable=False)
+        id                  - Integer primary key
 
-    # The unique ID given to this place in the data source it was
-    # derived from.
-    external_id = Column(Unicode, index=True)
+        type                - The Place type, typically drawn from class constants (NATION, CITY, etc.)
 
-    # The name given to this place by the data source it was
-    # derived from.
-    external_name = Column(Unicode, index=True)
+        external_id         - Unique ID given to this Place in the data source it was derived from
 
-    # A canonical abbreviated name for this place. Generally used only
-    # for nations and states.
-    abbreviated_name = Column(Unicode, index=True)
+        external_name       - Name given to this Place by the data source it was derived from
 
-    # The most convenient place that 'contains' this place. For most
-    # places the most convenient parent will be a state. For states,
-    # the best parent will be a nation. A nation has no parent; neither
-    # does 'everywhere'.
-    parent_id = Column(
-        Integer, ForeignKey('places.id'), index=True
-    )
+        abbreviated_name    - Canonical abbreviation for this Place. Generally used only for nations and states.
 
-    children = relationship(
-        "Place",
-        backref=backref("parent", remote_side=[id]),
-        lazy="joined"
-    )
+        geometry            - The geography of the Place itself. Stored internally as a Geometry, which means we
+                              have to cast to Geography when doing calculations that involve great circle distance.
 
-    # The geography of the place itself. It is stored internally as a
-    # geometry, which means we have to cast to Geography when doing
-    # calculations.
-    geometry = Column(Geometry(srid=4326), nullable=True)
+    Place model relationships:
 
-    aliases = relationship("PlaceAlias", backref='place')
+        Place
+            parent          - The most convenient place that 'contains' this place. For most places the most
+                              convenient parent will be a state. For states, the best parent will be a nation.
+                              A nation has no parent; neither does 'everywhere'.
+            children        - The Places which use this Place as parent.
 
-    service_areas = relationship("ServiceArea", backref="place")
+        PlaceAlias
 
-    @classmethod
-    def everywhere(cls, _db):
-        """Return a special Place that represents everywhere.
+        ServiceArea
+    """
+    ##### Class Constants ####################################################  # noqa: E266
+    NATION                  = PLACE_NATION                  # noqa: E221
+    STATE                   = PLACE_STATE                   # noqa: E221
+    COUNTY                  = PLACE_COUNTY                  # noqa: E221
+    CITY                    = PLACE_CITY                    # noqa: E221
+    POSTAL_CODE             = PLACE_POSTAL_CODE             # noqa: E221
+    LIBRARY_SERVICE_AREA    = PLACE_LIBRARY_SERVICE_AREA    # noqa: E221
+    EVERYWHERE              = PLACE_EVERYWHERE              # noqa: E221
 
-        This place has no .geometry, so attempts to use it in
-        geographic comparisons will fail.
+    ##### Public Interface / Magic Methods ###################################  # noqa: E266
+    def __repr__(self):
+        parent = self.parent.external_name if self.parent else None
+        abbr = f"abbr={self.abbreviated_name} " if self.abbreviated_name else ''
+        return f"<Place: {self.external_name} type={self.type} {abbr}external_id={self.external_id} parent={parent}>"
+
+    def as_centroid_point(self):
+        if not self.geometry:
+            return None
+
+        db_session = Session.object_session(self)
+        centroid = func.ST_AsEWKT(func.ST_Centroid(Place.geometry))
+        stmt = select([centroid]).where(Place.id == self.id)
+        return db_session.execute(stmt).scalar()
+
+    def overlaps_not_counting_border(self, qu):
         """
-        place, is_new = get_one_or_create(
-            _db, Place, type=cls.EVERYWHERE,
-            create_method_kwargs=dict(external_id="Everywhere",
-                                      external_name="Everywhere")
-        )
-        return place
+        Modifies a filter to find places that have points inside this Place, not counting the border.
 
-    @classmethod
-    def default_nation(cls, _db):
-        """Return the default nation for this library registry.
-
-        If an incoming coverage area doesn't mention a nation, we'll
-        assume it's within this nation.
-
-        :return: The default nation, if one can be found. Otherwise, None.
+        Connecticut has no points inside New York, but the two states share a border. This method
+        creates a more real-world notion of 'inside' that does not count a shared border.
         """
-        default_nation = None
-        abbreviation = ConfigurationSetting.sitewide(
-            _db, Configuration.DEFAULT_NATION_ABBREVIATION
-        ).value
-        if abbreviation:
-            default_nation = get_one(
-                _db, Place, type=Place.NATION, abbreviated_name=abbreviation
-            )
-            if not default_nation:
-                logging.error(
-                    "Could not look up default nation %s", abbreviation
-                )
-        return default_nation
+        intersects = Place.geometry.intersects(self.geometry)
+        touches = func.ST_Touches(Place.geometry, self.geometry)
+        return qu.filter(intersects).filter(touches == False)       # noqa: E712
 
-    @classmethod
-    def larger_place_types(cls, type):
-        """Return a list of place types known to be bigger than `type`.
-
-        Places don't form a strict heirarchy. In particular, ZIP codes
-        are not 'smaller' than cities. But counties and cities are
-        smaller than states, and states are smaller than nations, so
-        if you're searching inside a state for a place called "Japan",
-        you know that the nation of Japan is not what you're looking
-        for.
+    def lookup_inside(self, name, using_overlap=False, using_external_source=True):
         """
-        larger = [Place.EVERYWHERE]
-        if type not in (Place.NATION, Place.EVERYWHERE):
-            larger.append(Place.NATION)
-        if type in (Place.COUNTY, Place.CITY, Place.POSTAL_CODE):
-            larger.append(Place.STATE)
-        if type == Place.CITY:
-            larger.append(Place.COUNTY)
-        return larger
+        Look up a named Place that is geographically 'inside' this Place.
 
-    @classmethod
-    def parse_name(cls, place_name):
-        """Try to extract a place type from a name.
+        :param name: The name of a place, such as "Boston" or "Calabasas, CA", or "Cook County".
 
-        :return: A 2-tuple (place_name, place_type)
+        :param using_overlap: If this is true, then place A is 'inside' place B if their shapes overlap,
+            not counting borders. For example, Montgomery is 'inside' Montgomery County, Alabama, and
+            the United States. However, Alabama is not 'inside' Georgia (even though they share a border).
 
-        e.g. "Kern County" becomes ("Kern", Place.COUNTY)
-        "Arizona State" becomes ("Arizona", Place.STATE)
-        "Chicago" becaomes ("Chicago", None)
+            If `using_overlap` is false, then place A is 'inside' place B only if B is the .parent of A.
+            In this case, Alabama is considered to be 'inside' the United States, but Montgomery is not
+            -- the only place it's 'inside' is Alabama. Checking this way is much faster, so it's the default.
+
+        :param using_external_source: If this is True, then if no named place can be found in the database,
+            the uszipcodes library will be used in an attempt to find some equivalent postal codes.
+
+        :return: A Place object, or None if no match could be found.
+
+        :raise MultipleResultsFound: If more than one Place with the given name is 'inside' this Place.
         """
-        check = place_name.lower()
-        place_type = None
-        if check.endswith(' county'):
-            place_name = place_name[:-7]
-            place_type = Place.COUNTY
+        parts = Place.name_parts(name)
+        if len(parts) > 1:
+            # We're trying to look up a scoped name such as "Boston, MA". `name_parts` has turned
+            # "Boston, MA" into ["MA", "Boston"].
+            #
+            # Now we need to look for "MA" inside ourselves, and then look for "Boston" inside the object we get back.
+            look_in_here = self
+            for part in parts:
+                look_in_here = look_in_here.lookup_inside(part, using_overlap)
+                if not look_in_here:
+                    # A link in the chain has failed. Return None
+                    # immediately.
+                    return None
+            # Every link in the chain has succeeded, and `must_be_inside`
+            # now contains the Place we were looking for.
+            return look_in_here
 
-        if check.endswith(' state'):
-            place_name = place_name[:-6]
-            place_type = Place.STATE
-        return place_name, place_type
+        # If we get here, it means we're looking up "Boston" within Massachussets, or "Kern County"
+        # within the United States. In other words, we expect to find at most one place with
+        # this name inside the `must_be_inside` object.
+        #
+        # If we find more than one, it's an error. The name should have been scoped better. This will
+        # happen if you search for "Springfield" or "Lake County" within the United States, instead of
+        # specifying which state you're talking about.
+        _db = Session.object_session(self)
+        qu = Place.lookup_by_name(_db, name).filter(Place.type != self.type)
 
-    @classmethod
-    def lookup_by_name(cls, _db, name, place_type=None):
-        """Look up one or more Places by name.
-        """
-        if not place_type:
-            name, place_type = cls.parse_name(name)
-        qu = _db.query(Place).outerjoin(PlaceAlias).filter(
-            or_(Place.external_name == name, Place.abbreviated_name == name,
-                PlaceAlias.name == name)
-        )
-        if place_type:
-            qu = qu.filter(Place.type == place_type)
+        # Don't look in a place type known to be 'bigger' than this place.
+        exclude_types = Place.larger_place_types(self.type)
+        qu = qu.filter(~Place.type.in_(exclude_types))
+
+        if self.type == self.EVERYWHERE:
+            # The concept of 'inside' is not relevant because every place is 'inside' EVERYWHERE.
+            # We are really trying to find one and only one place with a certain name.
+            pass
         else:
-            # The place type "county" is excluded unless it was
-            # explicitly asked for (e.g. "Cook County"). This is to
-            # avoid ambiguity in the many cases when a state contains
-            # a county and a city with the same name. In all realistic
-            # cases, someone using "Foo" to talk about a library
-            # service area is referring to the city of Foo, not Foo
-            # County -- if they want Foo County they can say "Foo
-            # County".
-            qu = qu.filter(Place.type != Place.COUNTY)
+            if using_overlap and self.geometry is not None:
+                qu = self.overlaps_not_counting_border(qu)
+            else:
+                parent = aliased(Place)
+                grandparent = aliased(Place)
+                qu = qu.join(parent, Place.parent_id == parent.id)
+                qu = qu.outerjoin(grandparent, parent.parent_id == grandparent.id)
+
+                # For postal codes, but no other types of places, we allow the lookup to skip a level.
+                # This lets you look up "93203" within a state *or* within the nation.
+                postal_code_grandparent_match = and_(Place.type == Place.POSTAL_CODE, grandparent.id == self.id)
+                qu = qu.filter(or_(Place.parent == self, postal_code_grandparent_match))
+
+        places = qu.all()
+        if len(places) == 0:
+            if using_external_source:
+                # We don't have any matching places in the database _now_, but there's a possibility
+                # we can find a representative postal code.
+                return self.lookup_one_through_external_source(name)
+            else:
+                # We're not allowed to use uszipcodes, probably because this method was called by
+                # lookup_through_external_source.
+                return None
+        if len(places) > 1:
+            raise MultipleResultsFound(f"More than one place called {name} inside {self.external_name}.")
+        return places[0]
+
+    def lookup_one_through_external_source(self, name):
+        """
+        Use an external source to find a Place that is a) inside `self`
+        and b) identifies the place human beings call `name`.
+
+        Currently the only way this might work is when using
+        uszipcodes to look up a city inside a state. In this case the result
+        will be a Place representing one of the city's postal codes.
+
+        :return: A Place, or None if the lookup fails.
+        """
+        if self.type != Place.STATE:
+            return None         # uszipcodes keeps track of places in terms of their state.
+
+        search = uszipcode.SearchEngine(
+            db_file_dir=Configuration.DATADIR,
+            simple_zipcode=True
+        )
+        state = self.abbreviated_name
+        uszipcode_matches = []
+        if (state in search.state_to_city_mapper and name in search.state_to_city_mapper[state]):
+            # The given name is an exact match for one of the
+            # cities. Let's look up every ZIP code for that city.
+            uszipcode_matches = search.by_city_and_state(name, state, returns=None)
+
+        # Look up a Place object for each ZIP code and return the
+        # first one we actually know about.
+        #
+        # Set using_external_source to False to eliminate the
+        # possibility of wasted effort or (I don't think this can
+        # happen) infinite recursion.
+        for match in uszipcode_matches:
+            place = self.lookup_inside(match.zipcode, using_external_source=False)
+            if place:
+                return place
+
+    def served_by(self):
+        """
+        Find all Libraries with a ServiceArea whose Place overlaps
+        this Place, not counting the border.
+
+        A Library whose ServiceArea borders this place, but does not
+        intersect this place, is not counted. This way, the state
+        library from the next state over doesn't count as serving your
+        state.
+        """
+        _db = Session.object_session(self)
+        qu = _db.query(Library).join(Library.service_areas).join(ServiceArea.place)
+        qu = self.overlaps_not_counting_border(qu)
         return qu
 
-    @classmethod
-    def lookup_one_by_name(cls, _db, name, place_type=None):
-        return cls.lookup_by_name(_db, name, place_type).one()
+    ##### SQLAlchemy Table properties ########################################  # noqa: E266
+    __tablename__ = "places"
 
-    @classmethod
-    def to_geojson(cls, _db, *places):
-        """Convert one or more Place objects to a dictionary that will become
-        a GeoJSON document when converted to JSON.
+    ##### SQLAlchemy non-Column components ###################################  # noqa: E266
+
+    ##### SQLAlchemy Columns #################################################  # noqa: E266
+    id = Column(Integer, primary_key=True)
+    type = Column(Unicode(255), index=True, nullable=False)
+    external_id = Column(Unicode, index=True)
+    external_name = Column(Unicode, index=True)
+    abbreviated_name = Column(Unicode, index=True)
+    geometry = Column(Geometry(srid=4326), nullable=True)
+
+    ##### SQLAlchemy Relationships ###########################################  # noqa: E266
+    parent_id = Column(Integer, ForeignKey('places.id'), index=True)
+    children = relationship("Place", backref=backref("parent", remote_side=[id]), lazy="joined")
+    aliases = relationship("PlaceAlias", backref='place')
+    service_areas = relationship("ServiceArea", backref="place")
+
+    ##### SQLAlchemy Field Validation ########################################  # noqa: E266
+
+    ##### Properties and Getters/Setters #####################################  # noqa: E266
+    @property
+    def library_type(self):
+        """If a library serves this place, what type of library does that make
+        it?
+        :return: A string; one of the constants from LibraryType.
         """
-        geojson = select(
-            [func.ST_AsGeoJSON(Place.geometry)]
-        ).where(
-            Place.id.in_([x.id for x in places])
-        )
-        results = [x[0] for x in _db.execute(geojson)]
-        if len(results) == 1:
-            # There's only one item, and it is a valid
-            # GeoJSON document on its own.
-            return json.loads(results[0])
-
-        # We have either more or less than one valid item.
-        # In either case, a GeometryCollection is appropriate.
-        body = {"type": "GeometryCollection", "geometries": [json.loads(x) for x in results]}
-        return body
-
-    @classmethod
-    def name_parts(cls, name):
-        """Split a nested geographic name into parts.
-
-        "Boston, MA" is split into ["MA", "Boston"]
-        "Lake County, Ohio, USA" is split into
-        ["USA", "Ohio", "Lake County"]
-
-        There is no guarantee that these place names correspond to
-        Places in the database.
-
-        :param name: The name to split into parts.
-        :return: A list of place names, with the largest place at the front
-           of the list.
-        """
-        return [x.strip() for x in reversed(name.split(",")) if x.strip()]
+        if self.type == Place.EVERYWHERE:
+            return LibraryType.UNIVERSAL
+        elif self.type == Place.NATION:
+            return LibraryType.NATIONAL
+        elif self.type == Place.STATE:
+            # Whether this is a 'state' library, 'province' library,
+            # etc. depends on which nation it's in.
+            library_type = LibraryType.STATE
+            if self.parent and self.parent.type == Place.NATION:
+                library_type = LibraryType.ADMINISTRATIVE_DIVISION_TYPES.get(
+                    self.parent.abbreviated_name, library_type
+                )
+            return library_type
+        elif self.type == Place.COUNTY:
+            return LibraryType.COUNTY
+        return LibraryType.LOCAL
 
     @property
     def human_friendly_name(self):
         """Generate the sort of string a human would recognize as an
         unambiguous name for this place.
-
         This is in some sense the opposite of parse_name.
-
         :return: A string, or None if there is no human-friendly name for
            this place.
         """
@@ -1024,192 +1166,132 @@ class Place(Base):
         #  France
         return self.external_name
 
-    def overlaps_not_counting_border(self, qu):
-        """Modifies a filter to find places that have points inside this
-        Place, not counting the border.
-
-        Connecticut has no points inside New York, but the two states
-        share a border. This method creates a more real-world notion
-        of 'inside' that does not count a shared border.
+    ##### Class Methods ######################################################  # noqa: E266
+    @classmethod
+    def everywhere(cls, _db):
         """
-        intersects = Place.geometry.intersects(self.geometry)
-        touches = func.ST_Touches(Place.geometry, self.geometry)
-        return qu.filter(intersects).filter(touches == False)  # noqa: E712
+        Return a special Place that represents everywhere.
 
-    def lookup_inside(self, name, using_overlap=False, using_external_source=True):
-
-        """Look up a named Place that is geographically 'inside' this Place.
-
-        :param name: The name of a place, such as "Boston" or
-        "Calabasas, CA", or "Cook County".
-
-        :param using_overlap: If this is true, then place A is
-        'inside' place B if their shapes overlap, not counting
-        borders. For example, Montgomery is 'inside' Montgomery
-        County, Alabama, and the United States. However, Alabama is
-        not 'inside' Georgia (even though they share a border).
-
-        If `using_overlap` is false, then place A is 'inside' place B
-        only if B is the .parent of A. In this case, Alabama is
-        considered to be 'inside' the United States, but Montgomery is
-        not -- the only place it's 'inside' is Alabama. Checking this way
-        is much faster, so it's the default.
-
-        :param using_external_source: If this is True, then if no named
-        place can be found in the database, the uszipcodes library
-        will be used in an attempt to find some equivalent postal codes.
-
-        :return: A Place object, or None if no match could be found.
-
-        :raise MultipleResultsFound: If more than one Place with the
-        given name is 'inside' this Place.
-
+        This place has no .geometry, so attempts to use it in geographic comparisons will fail.
         """
-        parts = Place.name_parts(name)
-        if len(parts) > 1:
-            # We're trying to look up a scoped name such as "Boston,
-            # MA". `name_parts` has turned "Boston, MA" into ["MA",
-            # "Boston"].
-            #
-            # Now we need to look for "MA" inside ourselves, and then
-            # look for "Boston" inside the object we get back.
-            look_in_here = self
-            for part in parts:
-                look_in_here = look_in_here.lookup_inside(part, using_overlap)
-                if not look_in_here:
-                    # A link in the chain has failed. Return None
-                    # immediately.
-                    return None
-            # Every link in the chain has succeeded, and `must_be_inside`
-            # now contains the Place we were looking for.
-            return look_in_here
+        (place, _) = get_one_or_create(
+            _db, Place, type=cls.EVERYWHERE,
+            create_method_kwargs={"external_id": "Everywhere", "external_name": "Everywhere"}
+        )
+        return place
 
-        # If we get here, it means we're looking up "Boston" within
-        # Massachussets, or "Kern County" within the United States.
-        # In other words, we expect to find at most one place with
-        # this name inside the `must_be_inside` object.
-        #
-        # If we find more than one, it's an error. The name should
-        # have been scoped better. This will happen if you search for
-        # "Springfield" or "Lake County" within the United States,
-        # instead of specifying which state you're talking about.
-        _db = Session.object_session(self)
-        qu = Place.lookup_by_name(_db, name).filter(Place.type != self.type)
+    @classmethod
+    def default_nation(cls, _db):
+        """Return the default nation for this library registry.
 
-        # Don't look in a place type known to be 'bigger' than this
-        # place.
-        exclude_types = Place.larger_place_types(self.type)
-        qu = qu.filter(~Place.type.in_(exclude_types))
+        If an incoming coverage area doesn't mention a nation, we'll assume it's within this nation.
 
-        if self.type == self.EVERYWHERE:
-            # The concept of 'inside' is not relevant because every
-            # place is 'inside' EVERYWHERE. We are really trying to
-            # find one and only one place with a certain name.
-            pass
+        :return: The default nation, if one can be found. Otherwise, None.
+        """
+        default_nation = None
+        abbreviation = ConfigurationSetting.sitewide(_db, Configuration.DEFAULT_NATION_ABBREVIATION).value
+        if abbreviation:
+            default_nation = get_one(_db, Place, type=Place.NATION, abbreviated_name=abbreviation)
+            if not default_nation:
+                logging.error(f"Could not look up default nation {abbreviation}")
+        return default_nation
+
+    @classmethod
+    def larger_place_types(cls, type):
+        """
+        Return a list of place types known to be bigger than `type`.
+
+        Places don't form a strict heirarchy. In particular, ZIP codes are not 'smaller' than cities.
+        But counties and cities are smaller than states, and states are smaller than nations, so
+        if you're searching inside a state for a place called "Japan", you know that the nation of
+        Japan is not what you're looking for.
+        """
+        larger = [Place.EVERYWHERE]
+        if type not in (Place.NATION, Place.EVERYWHERE):
+            larger.append(Place.NATION)
+        if type in (Place.COUNTY, Place.CITY, Place.POSTAL_CODE):
+            larger.append(Place.STATE)
+        if type == Place.CITY:
+            larger.append(Place.COUNTY)
+        return larger
+
+    @classmethod
+    def parse_name(cls, place_name):
+        """
+        Try to extract a place type from a name.
+
+        :return: A 2-tuple (place_name, place_type)
+
+        e.g. "Kern County" becomes ("Kern", Place.COUNTY); "Arizona State" becomes ("Arizona", Place.STATE);
+            "Chicago" becaomes ("Chicago", None)
+        """
+        check = place_name.lower()
+        place_type = None
+        if check.endswith(' county'):
+            place_name = place_name[:-7]
+            place_type = Place.COUNTY
+
+        if check.endswith(' state'):
+            place_name = place_name[:-6]
+            place_type = Place.STATE
+        return place_name, place_type
+
+    @classmethod
+    def lookup_by_name(cls, _db, name, place_type=None):
+        """Look up one or more Places by name"""
+        if not place_type:
+            name, place_type = cls.parse_name(name)
+
+        qu = _db.query(Place).outerjoin(PlaceAlias).filter(
+            or_(Place.external_name == name, Place.abbreviated_name == name, PlaceAlias.name == name)
+        )
+
+        if place_type:
+            qu = qu.filter(Place.type == place_type)
         else:
-            if using_overlap and self.geometry is not None:
-                qu = self.overlaps_not_counting_border(qu)
-            else:
-                parent = aliased(Place)
-                grandparent = aliased(Place)
-                qu = qu.join(parent, Place.parent_id == parent.id)
-                qu = qu.outerjoin(grandparent, parent.parent_id == grandparent.id)
+            # The place type "county" is excluded unless it was explicitly asked for (e.g. "Cook County").
+            # This is to avoid ambiguity in the many cases when a state contains a county and a city with
+            # the same name. In all realistic cases, someone using "Foo" to talk about a library service area
+            # is referring to the city of Foo, not Foo County -- if they want Foo County they can say "Foo County".
+            qu = qu.filter(Place.type != Place.COUNTY)
 
-                # For postal codes, but no other types of places, we
-                # allow the lookup to skip a level. This lets you look
-                # up "93203" within a state *or* within the nation.
-                postal_code_grandparent_match = and_(
-                    Place.type == Place.POSTAL_CODE, grandparent.id == self.id,
-                )
-                qu = qu.filter(
-                    or_(Place.parent == self, postal_code_grandparent_match)
-                )
-
-        places = qu.all()
-        if len(places) == 0:
-            if using_external_source:
-                # We don't have any matching places in the database _now_,
-                # but there's a possibility we can find a representative
-                # postal code.
-                return self.lookup_one_through_external_source(name)
-            else:
-                # We're not allowed to use uszipcodes, probably
-                # because this method was called by
-                # lookup_through_external_source.
-                return None
-        if len(places) > 1:
-            raise MultipleResultsFound(
-                "More than one place called %s inside %s." % (
-                    name, self.external_name
-                )
-            )
-        return places[0]
-
-    def lookup_one_through_external_source(self, name):
-        """Use an external source to find a Place that is a) inside `self`
-        and b) identifies the place human beings call `name`.
-
-        Currently the only way this might work is when using
-        uszipcodes to look up a city inside a state. In this case the result
-        will be a Place representing one of the city's postal codes.
-
-        :return: A Place, or None if the lookup fails.
-        """
-        if self.type != Place.STATE:
-            # uszipcodes keeps track of places in terms of their state.
-            return None
-
-        search = uszipcode.SearchEngine(simple_zipcode=True)
-        state = self.abbreviated_name
-        uszipcode_matches = []
-        if (state in search.state_to_city_mapper and name in search.state_to_city_mapper[state]):
-            # The given name is an exact match for one of the
-            # cities. Let's look up every ZIP code for that city.
-            uszipcode_matches = search.by_city_and_state(
-                name, state, returns=None
-            )
-
-        # Look up a Place object for each ZIP code and return the
-        # first one we actually know about.
-        #
-        # Set using_external_source to False to eliminate the
-        # possibility of wasted effort or (I don't think this can
-        # happen) infinite recursion.
-        for match in uszipcode_matches:
-            place = self.lookup_inside(
-                match.zipcode, using_external_source=False
-            )
-            if place:
-                return place
-
-    def served_by(self):
-        """Find all Libraries with a ServiceArea whose Place overlaps
-        this Place, not counting the border.
-
-        A Library whose ServiceArea borders this place, but does not
-        intersect this place, is not counted. This way, the state
-        library from the next state over doesn't count as serving your
-        state.
-        """
-        _db = Session.object_session(self)
-        qu = _db.query(Library).join(Library.service_areas).join(
-            ServiceArea.place)
-        qu = self.overlaps_not_counting_border(qu)
         return qu
 
-    def __repr__(self):
-        if self.parent:
-            parent = self.parent.external_name
-        else:
-            parent = None
-        if self.abbreviated_name:
-            abbr = "abbr=%s " % self.abbreviated_name
-        else:
-            abbr = ''
-        output = "<Place: %s type=%s %sexternal_id=%s parent=%s>" % (
-            self.external_name, self.type, abbr, self.external_id, parent
+    @classmethod
+    def lookup_one_by_name(cls, _db, name, place_type=None):
+        return cls.lookup_by_name(_db, name, place_type).one()
+
+    @classmethod
+    def to_geojson(cls, _db, *places):
+        """Convert 1+ Place objects to a dict that will become a GeoJSON document when converted to JSON"""
+        geojson = select(
+            [func.ST_AsGeoJSON(Place.geometry)]
+        ).where(
+            Place.id.in_([x.id for x in places])
         )
-        return str(output)
+        results = [x[0] for x in _db.execute(geojson)]
+        if len(results) == 1:
+            # There's only one item, and it is a valid GeoJSON document on its own.
+            return json.loads(results[0])
+
+        # We have either more or less than one valid item. In either case, a GeometryCollection is appropriate.
+        body = {"type": "GeometryCollection", "geometries": [json.loads(x) for x in results]}
+        return body
+
+    @classmethod
+    def name_parts(cls, name):
+        """
+        Split a nested geographic name into parts.
+
+        "Boston, MA" is split into ["MA", "Boston"]
+        "Lake County, Ohio, USA" is split into ["USA", "Ohio", "Lake County"]
+
+        There is no guarantee that these place names correspond to Places in the database.
+
+        :param name: The name to split into parts.
+        :return: A list of place names, with the largest place at the front of the list.
+        """
+        return [x.strip() for x in reversed(name.split(",")) if x.strip()]
 
 
 class PlaceAlias(Base):

@@ -1,37 +1,21 @@
-from sqlalchemy import func
-from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm.exc import MultipleResultsFound
 import datetime
 import json
 import random
 
 import pytest
+from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm.exc import MultipleResultsFound
 
 from config import Configuration
 from emailer import Emailer
-from model import (
-    create,
-    get_one_or_create,
-    Admin,
-    Audience,
-    CollectionSummary,
-    ConfigurationSetting,
-    DelegatedPatronIdentifier,
-    ExternalIntegration,
-    Hyperlink,
-    Library,
-    LibraryAlias,
-    Place,
-    PlaceAlias,
-    Validation,
-)
-from util import (
-    GeometryUtility
-)
+from model import (Admin, Audience, CollectionSummary, ConfigurationSetting,
+                   DelegatedPatronIdentifier, ExternalIntegration, Hyperlink,
+                   Library, LibraryAlias, Place, PlaceAlias, Validation,
+                   create, get_one_or_create)
+from util import GeometryUtility
 
-from . import (
-    DatabaseTest,
-)
+from . import DatabaseTest
 
 
 class TestPlace(DatabaseTest):
@@ -237,6 +221,7 @@ class TestPlace(DatabaseTest):
         # "Santa Barbara County"
         assert m(self._db, "Santa Barbara County").all() == [sb_county]
 
+    @pytest.mark.skip(reason="docker related failure for uszipcode opening a filehandle")
     def test_lookup_inside(self):
         us = self.crude_us
         zip_10018 = self.zip_10018
@@ -341,6 +326,7 @@ class TestPlace(DatabaseTest):
         assert zip_10018.lookup_inside("New York", using_overlap=True) == nyc
         assert zip_10018.lookup_inside("New York", using_overlap=False) is None
 
+    @pytest.mark.skip(reason="docker related failure for uszipcode opening a filehandle")
     def test_lookup_one_through_external_source(self):
         # We're going to find the approximate location of Poughkeepsie
         # even though the database doesn't have a Place named
@@ -699,87 +685,12 @@ class TestLibrary(DatabaseTest):
         )
         assert library.service_area_name is None
 
-    def test_nearby(self):
-        # Create two libraries. One serves New York City, and one serves
-        # the entire state of Connecticut.
-        nypl = self._library(
-            "New York Public Library", eligibility_areas=[self.new_york_city]
-        )
-        ct_state = self._library(
-            "Connecticut State Library", eligibility_areas=[self.connecticut_state]
-        )
-
-        # From this point in Brooklyn, NYPL is the closest library.
-        # NYPL's service area includes that point, so the distance is
-        # zero. The service area of CT State (i.e. the Connecticut
-        # border) is only 44 kilometers away, so it also shows up.
-        [(lib1, d1), (lib2, d2)] = Library.nearby(self._db, (40.65, -73.94))
-
-        assert d1 == 0
-        assert lib1 == nypl
-
-        assert int(d2/1000) == 44
-        assert lib2 == ct_state
-
-        # From this point in Connecticut, CT State is the closest
-        # library (0 km away), so it shows up first, but NYPL (61 km
-        # away) also shows up as a possibility.
-        [(lib1, d1), (lib2, d2)] = Library.nearby(self._db, (41.3, -73.3))
-        assert lib1 == ct_state
-        assert d1 == 0
-
-        assert lib2 == nypl
-        assert int(d2/1000) == 61
-
-        # From this point in Pennsylvania, NYPL shows up (142km away) but
-        # CT State does not.
-        [(lib1, d1)] = Library.nearby(self._db, (40, -75.8))
-        assert lib1 == nypl
-        assert int(d1/1000) == 142
-
-        # If we only look within a 100km radius, then there are no
-        # libraries near that point in Pennsylvania.
-        assert Library.nearby(self._db, (40, -75.8), 100).all() == []
-
-        # By default, nearby() only finds libraries that are in production.
-        def m(production):
-            return Library.nearby(
-                self._db, (41.3, -73.3), production=production
-            ).count()
-        # Take all the libraries we found earlier out of production.
-        for lib in ct_state, nypl:
-            lib.registry_stage = Library.TESTING_STAGE
-        # Now there are no results.
-        assert m(True) == 0
-
-        # But we can run a search that includes libraries in the TESTING stage.
-        assert m(False) == 2
-
     def test_query_cleanup(self):
         m = Library.query_cleanup
 
         assert m("THE LIBRARY") == "the library"
         assert m("\tthe   library\n\n") == "the library"
         assert m("the libary") == "the library"
-
-    def test_as_postal_code(self):
-        m = Library.as_postal_code
-        # US ZIP codes are recognized as postal codes.
-        assert m("93203") == "93203"
-        assert m("93203-1234") == "93203"
-        assert m("the library") is None
-
-        # A UK post code is not currently recognized.
-        assert m("AB1 0AA") is None
-
-    def test_query_parts(self):
-        m = Library.query_parts
-        assert m("93203") == (None, "93203", Place.POSTAL_CODE)
-        assert m("new york public library") == ("new york public library", "new york", None)
-        assert m("queens library") == ("queens library", "queens", None)
-        assert m("kern county library") == ("kern county library", "kern", Place.COUNTY)
-        assert m("new york state library") == ("new york state library", "new york", Place.STATE)
-        assert m("lapl") == ("lapl", "lapl", None)
 
     def test_search_by_library_name(self):
         def search(name, here=None, **kwargs):
@@ -914,6 +825,7 @@ class TestLibrary(DatabaseTest):
         results = list(Library.search_within_description(self._db, "testing purposes"))
         assert results == [library]
 
+    @pytest.mark.skip(reason="replacing this with new search")
     def test_search(self):
         """Test the overall search method."""
 
@@ -963,6 +875,7 @@ class TestLibrary(DatabaseTest):
         # by passing in production=False.
         assert m(False) == 2
 
+    @pytest.mark.skip("replacing this")
     def test_search_excludes_duplicates(self):
         # Here's a library that serves a place called Kansas
         # whose name is also "Kansas"
