@@ -1,11 +1,12 @@
 import json
 
+import adobe_xml_templates as t
 from adobe_vendor_id import (
     AdobeSignInRequestParser,
     AdobeAccountInfoRequestParser,
+    AdobeVendorIDClient,
     AdobeVendorIDRequestHandler,
     AdobeVendorIDModel,
-    MockAdobeVendorIDClient,
     VendorIDAuthenticationError,
     VendorIDServerException,
 )
@@ -19,6 +20,45 @@ from util.short_client_token import ShortClientTokenEncoder
 from util.string_helpers import base64
 
 from . import DatabaseTest
+
+
+class MockAdobeVendorIDClient(AdobeVendorIDClient):
+    """Mock AdobeVendorIDClient for use in tests."""
+
+    def __init__(self):
+        self.queue = []
+
+    def enqueue(self, response):
+        """Queue a response."""
+        self.queue.insert(0, response)
+
+    def dequeue(self, *args, **kwargs):
+        """Dequeue a response. If it's an exception, raise it. Otherwise return it."""
+        if not self.queue:
+            raise VendorIDServerException("No response queued.")
+
+        response = self.queue.pop()
+
+        if isinstance(response, Exception):
+            raise response
+
+        return response
+
+    status = dequeue
+    sign_in_authdata = dequeue
+    sign_in_standard = dequeue
+    user_info = dequeue
+
+
+class TestAdobeVendorIdController:
+    def test_signin_handler(self):
+        ...
+
+    def test_userinfo_handler(self):
+        ...
+
+    def test_status_handler(self):
+        ...
 
 
 class VendorIDTest(DatabaseTest):
@@ -62,19 +102,13 @@ class TestConfiguration(VendorIDTest):
 
 
 class TestVendorIDRequestParsers(object):
-
-    username_sign_in_request = """<signInRequest method="standard" xmlns="http://ns.adobe.com/adept">
-<username>Vendor username</username>
-<password>Vendor password</password>
-</signInRequest>"""
-
-    authdata_sign_in_request = """<signInRequest method="authData" xmlns="http://ns.adobe.com/adept">
-<authData> dGhpcyBkYXRhIHdhcyBiYXNlNjQgZW5jb2RlZA== </authData>
-</signInRequest>"""
-
-    accountinfo_request = """<accountInfoRequest method="standard" xmlns="http://ns.adobe.com/adept">
-<user>urn:uuid:0xxxxxxx-xxxx-1xxx-xxxx-yyyyyyyyyyyy</user>
-</accountInfoRequest >"""
+    username_sign_in_request = t.SIGN_IN_REQUEST_TEMPLATE % {
+        "username": "Vendor username", "password": "Vendor password"
+    }
+    authdata_sign_in_request = t.AUTHDATA_SIGN_IN_REQUEST_TEMPLATE % {
+        "authdata": "dGhpcyBkYXRhIHdhcyBiYXNlNjQgZW5jb2RlZA=="
+    }
+    accountinfo_request = t.ACCOUNT_INFO_REQUEST_TEMPLATE % {"uuid": "urn:uuid:0xxxxxxx-xxxx-1xxx-xxxx-yyyyyyyyyyyy"}
 
     def test_username_sign_in_request(self):
         parser = AdobeSignInRequestParser()
@@ -92,25 +126,15 @@ class TestVendorIDRequestParsers(object):
         assert data == {'method': 'standard', 'user': 'urn:uuid:0xxxxxxx-xxxx-1xxx-xxxx-yyyyyyyyyyyy'}
 
 
-class TestVendorIDRequestHandler(object):
-
-    username_sign_in_request = """<signInRequest method="standard" xmlns="http://ns.adobe.com/adept">
-<username>%(username)s</username>
-<password>%(password)s</password>
-</signInRequest>"""
-
-    authdata_sign_in_request = """<signInRequest method="authData" xmlns="http://ns.adobe.com/adept">
-<authData>%(authdata)s</authData>
-</signInRequest>"""
-
-    accountinfo_request = """<accountInfoRequest method="standard" xmlns="http://ns.adobe.com/adept">
-<user>%(uuid)s</user>
-</accountInfoRequest >"""
+class TestVendorIDRequestHandler:
+    username_sign_in_request = t.SIGN_IN_REQUEST_TEMPLATE
+    accountinfo_request = t.ACCOUNT_INFO_REQUEST_TEMPLATE
 
     TEST_VENDOR_ID = "1045"
 
     user1_uuid = "test-uuid"
     user1_label = "Human-readable label for user1"
+    user1_signin_xml_response_body = t.SIGN_IN_RESPONSE_TEMPLATE % {"user": user1_uuid, "label": user1_label}
     username_password_lookup = {("user1", "pass1"): (user1_uuid, user1_label)}
     authdata_lookup = {"The secret token": (user1_uuid, user1_label)}
     userinfo_lookup = {user1_uuid: user1_label}
@@ -133,76 +157,92 @@ class TestVendorIDRequestHandler(object):
         return cls.userinfo_lookup.get(uuid)
 
     def test_error_document(self):
-        doc = self._handler.error_document(
-            "VENDORID", "Some random error")
+        doc = self._handler.error_document("VENDORID", "Some random error")
         assert doc == '<error xmlns="http://ns.adobe.com/adept" data="E_1045_VENDORID Some random error"/>'
 
     def test_handle_username_sign_in_request_success(self):
-        doc = self.username_sign_in_request % dict(username="user1", password="pass1")
-        result = self._handler.handle_signin_request(doc, self._standard_login, self._authdata_login)
-        result_start = (
-            '<signInResponse xmlns="http://ns.adobe.com/adept">\n'
-            '<user>test-uuid</user>\n'
-            '<label>Human-readable label for user1</label>\n'
-            '</signInResponse>'
+        signin_request_xml_body = t.SIGN_IN_REQUEST_TEMPLATE % {"username": "user1", "password": "pass1"}
+        result = self._handler.handle_signin_request(
+            signin_request_xml_body,
+            self._standard_login,
+            self._authdata_login
         )
-        assert result.startswith(result_start)
+        assert result.startswith(self.user1_signin_xml_response_body)
 
     def test_handle_username_sign_in_request_failure(self):
-        doc = self.username_sign_in_request % dict(username="user1", password="wrongpass")
-        result = self._handler.handle_signin_request(doc, self._standard_login, self._authdata_login)
-        assert result == '<error xmlns="http://ns.adobe.com/adept" data="E_1045_AUTH Incorrect barcode or PIN."/>'
+        signin_request_xml_body = t.SIGN_IN_REQUEST_TEMPLATE % {"username": self.user1_uuid, "password": "wrongpass"}
+        result = self._handler.handle_signin_request(
+            signin_request_xml_body,
+            self._standard_login,
+            self._authdata_login
+        )
+        expected = t.ERROR_RESPONSE_TEMPLATE % {
+            "vendor_id": "1045",
+            "type": "AUTH",
+            "message": "Incorrect barcode or PIN.",
+        }
+        assert result == expected
 
     def test_handle_username_authdata_request_success(self):
-        doc = self.authdata_sign_in_request % dict(authdata=base64.b64encode("The secret token"))
-        result = self._handler.handle_signin_request(doc, self._standard_login, self._authdata_login)
-        result_start = (
-            '<signInResponse xmlns="http://ns.adobe.com/adept">\n'
-            '<user>test-uuid</user>\n'
-            '<label>Human-readable label for user1</label>\n'
-            '</signInResponse>'
+        secret_token = base64.b64encode("The secret token")
+        authdata_request_xml_body = t.AUTHDATA_SIGN_IN_REQUEST_TEMPLATE % {"authdata": secret_token}
+        result = self._handler.handle_signin_request(
+            authdata_request_xml_body,
+            self._standard_login,
+            self._authdata_login
         )
-        assert result.startswith(result_start)
+        assert result.startswith(self.user1_signin_xml_response_body)
 
     def test_handle_username_authdata_request_invalid(self):
-        doc = self.authdata_sign_in_request % dict(authdata="incorrect")
+        doc = t.AUTHDATA_SIGN_IN_REQUEST_TEMPLATE % dict(authdata="incorrect")
         result = self._handler.handle_signin_request(doc, self._standard_login, self._authdata_login)
         assert result.startswith('<error xmlns="http://ns.adobe.com/adept" data="E_1045_AUTH')
 
     def test_handle_username_authdata_request_failure(self):
-        doc = self.authdata_sign_in_request % dict(authdata=base64.b64encode("incorrect"))
+        doc = t.AUTHDATA_SIGN_IN_REQUEST_TEMPLATE % dict(authdata=base64.b64encode("incorrect"))
         result = self._handler.handle_signin_request(doc, self._standard_login, self._authdata_login)
-        assert result == '<error xmlns="http://ns.adobe.com/adept" data="E_1045_AUTH Incorrect token."/>'
+        expected = t.ERROR_RESPONSE_TEMPLATE % {
+            "vendor_id": "1045",
+            "type": "AUTH",
+            "message": "Incorrect token.",
+        }
+        assert result == expected
 
     def test_failure_send_login_request_to_accountinfo(self):
-        doc = self.authdata_sign_in_request % dict(authdata=base64.b64encode("incorrect"))
+        doc = t.AUTHDATA_SIGN_IN_REQUEST_TEMPLATE % dict(authdata=base64.b64encode("incorrect"))
         result = self._handler.handle_accountinfo_request(doc, self._userinfo)
-        assert result == (
-            '<error xmlns="http://ns.adobe.com/adept" data="E_1045_ACCOUNT_INFO Request document in wrong format."/>'
-        )
+        expected = t.ERROR_RESPONSE_TEMPLATE % {
+            "vendor_id": "1045",
+            "type": "ACCOUNT_INFO",
+            "message": "Request document in wrong format.",
+        }
+        assert result == expected
 
     def test_failure_send_accountinfo_request_to_login(self):
         doc = self.accountinfo_request % dict(uuid=self.user1_uuid)
         result = self._handler.handle_signin_request(doc, self._standard_login, self._authdata_login)
-        assert result == (
-            '<error xmlns="http://ns.adobe.com/adept" data="E_1045_AUTH Request document in wrong format."/>'
-        )
+        expected = t.ERROR_RESPONSE_TEMPLATE % {
+            "vendor_id": "1045",
+            "type": "AUTH",
+            "message": "Request document in wrong format.",
+        }
+        assert result == expected
 
     def test_handle_accountinfo_success(self):
         doc = self.accountinfo_request % dict(uuid=self.user1_uuid)
         result = self._handler.handle_accountinfo_request(doc, self._userinfo)
-        assert result == (
-            '<accountInfoResponse xmlns="http://ns.adobe.com/adept">\n'
-            '<label>Human-readable label for user1</label>\n</accountInfoResponse>'
-        )
+        expected = t.ACCOUNT_INFO_RESPONSE_TEMPLATE % {"label": self.user1_label}
+        assert result == expected
 
     def test_handle_accountinfo_failure(self):
         doc = self.accountinfo_request % dict(uuid="not the uuid")
         result = self._handler.handle_accountinfo_request(doc, self._userinfo)
-        assert result == (
-            '<error xmlns="http://ns.adobe.com/adept" '
-            'data="E_1045_ACCOUNT_INFO Could not identify patron from \'not the uuid\'."/>'
-        )
+        expected = t.ERROR_RESPONSE_TEMPLATE % {
+            "vendor_id": "1045",
+            "type": "ACCOUNT_INFO",
+            "message": "Could not identify patron from 'not the uuid'.",
+        }
+        assert result == expected
 
 
 class TestVendorIDModel(VendorIDTest):

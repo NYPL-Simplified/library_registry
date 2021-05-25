@@ -1,16 +1,15 @@
-import flask
-from flask import Response
-
 import re
+
 import requests
+from flask import Response, request
 
+import adobe_xml_templates as t
 from model import ShortClientTokenDecoder
-
 from util.string_helpers import base64
 from util.xmlparser import XMLParser
 
 
-class AdobeVendorIDController(object):
+class AdobeVendorIDController:
     """
     Flask controllers that implement the Account Service and Authorization Service
     portions of the Adobe Vendor ID protocol.
@@ -18,10 +17,9 @@ class AdobeVendorIDController(object):
     def __init__(self, _db, vendor_id, node_value, delegates=None):
         """Constructor.
 
-        :param delegates: A list of URLs or AdobeVendorIDClient
-        objects. If this Vendor ID server cannot validate an incoming
-        login, it will delegate to each of these other servers in
-        turn.
+        :param delegates: A list of URLs or AdobeVendorIDClient objects. If this Vendor ID
+                          server cannot validate an incoming login, it will delegate to each
+                          of these other servers in turn.
         """
         if not delegates:
             delegates = []
@@ -34,7 +32,7 @@ class AdobeVendorIDController(object):
         """Process an incoming signInRequest document."""
         __transaction = self._db.begin_nested()
         output = self.request_handler.handle_signin_request(
-            flask.request.data,
+            request.data,
             self.model.standard_lookup,
             self.model.authdata_lookup
         )
@@ -45,7 +43,7 @@ class AdobeVendorIDController(object):
     def userinfo_handler(self):
         """Process an incoming userInfoRequest document."""
         output = self.request_handler.handle_accountinfo_request(
-            flask.request.data,
+            request.data,
             self.model.urn_to_label
         )
         return Response(output, 200, {"Content-Type": "application/xml"})
@@ -80,9 +78,7 @@ class AdobeRequestParser(XMLParser):
 
 
 class AdobeSignInRequestParser(AdobeRequestParser):
-
     REQUEST_XPATH = "/adept:signInRequest"
-
     STANDARD = 'standard'
     AUTH_DATA = 'authData'
 
@@ -106,7 +102,6 @@ class AdobeSignInRequestParser(AdobeRequestParser):
 
 
 class AdobeAccountInfoRequestParser(AdobeRequestParser):
-
     REQUEST_XPATH = "/adept:accountInfoRequest"
 
     def process_one(self, tag, namespaces):
@@ -116,27 +111,21 @@ class AdobeAccountInfoRequestParser(AdobeRequestParser):
         return data
 
 
-class AdobeVendorIDRequestHandler(object):
+class AdobeVendorIDRequestHandler:
     """Standalone class that can be tested without bringing in Flask or the database schema"""
 
-    SIGN_IN_RESPONSE_TEMPLATE = """<signInResponse xmlns="http://ns.adobe.com/adept">
-<user>%(user)s</user>
-<label>%(label)s</label>
-</signInResponse>"""
+    ##### Class Constants ####################################################  # noqa: E266
+    AUTH_ERROR_TYPE         = "AUTH"                                        # noqa: E221
+    ACCOUNT_INFO_ERROR_TYPE = "ACCOUNT_INFO"                                # noqa: E221
+    TOKEN_FAILURE           = 'Incorrect token.'                            # noqa: E221
+    AUTHENTICATION_FAILURE  = 'Incorrect barcode or PIN.'                   # noqa: E221
+    URN_LOOKUP_FAILURE      = "Could not identify patron from '%s'."        # noqa: E221
 
-    ACCOUNT_INFO_RESPONSE_TEMPLATE = """<accountInfoResponse xmlns="http://ns.adobe.com/adept">
-<label>%(label)s</label>
-</accountInfoResponse>"""
+    SIGN_IN_RESPONSE_TEMPLATE       = t.SIGN_IN_RESPONSE_TEMPLATE           # noqa: E221
+    ACCOUNT_INFO_RESPONSE_TEMPLATE  = t.ACCOUNT_INFO_RESPONSE_TEMPLATE      # noqa: E221
+    ERROR_RESPONSE_TEMPLATE         = t.ERROR_RESPONSE_TEMPLATE             # noqa: E221
 
-    AUTH_ERROR_TYPE = "AUTH"
-    ACCOUNT_INFO_ERROR_TYPE = "ACCOUNT_INFO"
-
-    ERROR_RESPONSE_TEMPLATE = '<error xmlns="http://ns.adobe.com/adept" data="E_%(vendor_id)s_%(type)s %(message)s"/>'
-
-    TOKEN_FAILURE = 'Incorrect token.'
-    AUTHENTICATION_FAILURE = 'Incorrect barcode or PIN.'
-    URN_LOOKUP_FAILURE = "Could not identify patron from '%s'."
-
+    ##### Public Interface / Magic Methods ###################################  # noqa: E266
     def __init__(self, vendor_id):
         self.vendor_id = vendor_id
 
@@ -193,6 +182,14 @@ class AdobeVendorIDRequestHandler(object):
 
     def error_document(self, type, message):
         return self.ERROR_RESPONSE_TEMPLATE % {"vendor_id": self.vendor_id, "type": type, "message": message}
+
+    ##### Private Methods ####################################################  # noqa: E266
+
+    ##### Properties and Getters/Setters #####################################  # noqa: E266
+
+    ##### Class Methods ######################################################  # noqa: E266
+
+    ##### Private Class Methods ##############################################  # noqa: E266
 
 
 class AdobeVendorIDModel:
@@ -382,31 +379,3 @@ class AdobeVendorIDClient:
             raise VendorIDServerException("Unexpected response: %s" % content)
 
         return identifier, label, content
-
-
-class MockAdobeVendorIDClient(AdobeVendorIDClient):
-    """Mock AdobeVendorIDClient for use in tests."""
-
-    def __init__(self):
-        self.queue = []
-
-    def enqueue(self, response):
-        """Queue a response."""
-        self.queue.insert(0, response)
-
-    def dequeue(self, *args, **kwargs):
-        """Dequeue a response. If it's an exception, raise it. Otherwise return it."""
-        if not self.queue:
-            raise VendorIDServerException("No response queued.")
-
-        response = self.queue.pop()
-
-        if isinstance(response, Exception):
-            raise response
-
-        return response
-
-    status = dequeue
-    sign_in_authdata = dequeue
-    sign_in_standard = dequeue
-    user_info = dequeue
