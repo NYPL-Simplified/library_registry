@@ -32,7 +32,7 @@ class AdobeVendorIDController:
         """Process an incoming signInRequest document."""
         __transaction = self._db.begin_nested()
         output = self.request_handler.handle_signin_request(
-            request.data,
+            request.data.decode('utf8'),
             self.model.standard_lookup,
             self.model.authdata_lookup
         )
@@ -43,7 +43,7 @@ class AdobeVendorIDController:
     def userinfo_handler(self):
         """Process an incoming userInfoRequest document."""
         output = self.request_handler.handle_accountinfo_request(
-            request.data,
+            request.data.decode('utf8'),
             self.model.urn_to_label
         )
         return Response(output, 200, {"Content-Type": "application/xml"})
