@@ -67,3 +67,120 @@ PLACE_CITY                    = 'city'                    # noqa: E221
 PLACE_POSTAL_CODE             = 'postal_code'             # noqa: E221
 PLACE_LIBRARY_SERVICE_AREA    = 'library_service_area'    # noqa: E221
 PLACE_EVERYWHERE              = 'everywhere'              # noqa: E221
+
+
+##############################################################################
+# Constant Classes
+##############################################################################
+class LibraryType:
+    """
+    Constant container for library types.
+
+    This is as defined here:
+
+    https://github.com/NYPL-Simplified/Simplified/wiki/LibraryRegistryPublicAPI#the-subject-scheme-for-library-types
+    """
+
+    SCHEME_URI  = "http://librarysimplified.org/terms/library-types"        # noqa: E221
+    LOCAL       = "local"                                                   # noqa: E221
+    COUNTY      = "county"                                                  # noqa: E221
+    STATE       = "state"                                                   # noqa: E221
+    PROVINCE    = "province"                                                # noqa: E221
+    NATIONAL    = "national"                                                # noqa: E221
+    UNIVERSAL   = "universal"                                               # noqa: E221
+
+    # Different nations use different terms for referring to their
+    # administrative divisions, which translates into different terms in
+    # the library type vocabulary.
+    ADMINISTRATIVE_DIVISION_TYPES = {
+        "US": STATE,
+        "CA": PROVINCE,
+    }
+
+    NAME_FOR_CODE = {
+        LOCAL: "Local library",
+        COUNTY: "County library",
+        STATE: "State library",
+        PROVINCE: "Provincial library",
+        NATIONAL: "National library",
+        UNIVERSAL: "Online library",
+    }
+
+
+##############################################################################
+# Search Related
+##############################################################################
+US_STATES = {
+    "AL": "Alabama",
+    "AK": "Alaska",
+    "AR": "Arkansas",
+    "AZ": "Arizona",
+    "CA": "California",
+    "CO": "Colorado",
+    "CT": "Connecticut",
+    "DC": "District of Columbia",
+    "DE": "Delaware",
+    "FL": "Florida",
+    "GA": "Georgia",
+    "HI": "Hawaii",
+    "IA": "Iowa",
+    "ID": "Idaho",
+    "IL": "Illinois",
+    "IN": "Indiana",
+    "KS": "Kansas",
+    "KY": "Kentucky",
+    "LA": "Louisiana",
+    "MA": "Massachusetts",
+    "MD": "Maryland",
+    "ME": "Maine",
+    "MI": "Michigan",
+    "MN": "Minnesota",
+    "MO": "Missouri",
+    "MS": "Mississippi",
+    "MT": "Montana",
+    "NC": "North Carolina",
+    "ND": "North Dakota",
+    "NE": "Nebraska",
+    "NH": "New Hampshire",
+    "NJ": "New Jersey",
+    "NM": "New Mexico",
+    "NV": "Nevada",
+    "NY": "New York",
+    "OH": "Ohio",
+    "OK": "Oklahoma",
+    "OR": "Oregon",
+    "PA": "Pennsylvania",
+    "PR": "Puerto Rico",
+    "RI": "Rhode Island",
+    "SC": "South Carolina",
+    "SD": "South Dakota",
+    "TN": "Tennessee",
+    "TX": "Texas",
+    "UT": "Utah",
+    "VA": "Virginia",
+    "VT": "Vermont",
+    "WA": "Washington",
+    "WI": "Wisconsin",
+    "WV": "West Virginia",
+    "WY": "Wyoming",
+}
+
+US_STATE_ABBREVIATIONS = [abbreviation.lower() for abbreviation in US_STATES.keys()]
+
+US_STATE_NAMES = [state.lower() for state in US_STATES.values()]
+
+MULTI_WORD_STATE_NAMES = [name for name in US_STATE_NAMES if ' ' in name]
+
+LIBRARY_KEYWORDS = [
+    'archive',
+    'bookmobile',
+    'bookmobiles',
+    'college',
+    'free',
+    'library',
+    'memorial',
+    'public',
+    'regional',
+    'research',
+    'university',
+]

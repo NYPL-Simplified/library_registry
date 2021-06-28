@@ -18,17 +18,17 @@ from sqlalchemy import (Boolean, Column, DateTime, Enum, ForeignKey, Index,
                         create_engine)
 from sqlalchemy import exc as sa_exc
 from sqlalchemy import func
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import (aliased, backref, relationship, sessionmaker,
                             validates)
-from sqlalchemy.orm.exc import MultipleResultsFound, NoResultFound
+from sqlalchemy.orm.exc import MultipleResultsFound
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql import compiler
 from sqlalchemy.sql.expression import (and_, cast, or_, select)
 
 from constants import (
+    LibraryType,
     PLACE_CITY,
     PLACE_COUNTY,
     PLACE_EVERYWHERE,
@@ -39,11 +39,11 @@ from constants import (
 )
 from config import Configuration
 from emailer import Emailer
+from model_helpers import (create, generate_secret, get_one, get_one_or_create)
 from util import GeometryUtility
 from util.language import LanguageCodes
-from util.search import LibrarySearchQuery
+from util.search import LSQuery
 from util.short_client_token import ShortClientTokenTool
-from util.string_helpers import random_string
 
 DEBUG = False
 Base = declarative_base()
@@ -66,27 +66,6 @@ def production_session():
     return _db
 
 
-def generate_secret():
-    """Generate a random secret."""
-    return random_string(24)
-
-
-def get_one(db, model, on_multiple='error', **kwargs):
-    q = db.query(model).filter_by(**kwargs)
-    try:
-        return q.one()
-    except MultipleResultsFound as e:
-        if on_multiple == 'error':
-            raise e
-        elif on_multiple == 'interchangeable':
-            # These records are interchangeable so we can use whichever one we want.
-            # May be a sign of a problem elsewhere. A db-level constraint might be useful.
-            q = q.limit(1)
-            return q.one()
-    except NoResultFound:
-        return None
-
-
 def dump_query(query):
     dialect = query.session.bind.dialect
     statement = query.statement
@@ -100,33 +79,6 @@ def dump_query(query):
         params[k] = sqlescape(v)
 
     return (comp.string.encode(enc) % params).decode(enc)
-
-
-def get_one_or_create(db, model, create_method='', create_method_kwargs=None, **kwargs):
-    one = get_one(db, model, **kwargs)
-    if one:
-        return (one, False)
-    else:
-        __transaction = db.begin_nested()
-        try:
-            if 'on_multiple' in kwargs:
-                # This kwarg is supported by get_one() but not by create().
-                del kwargs['on_multiple']
-            (obj, is_new) = create(db, model, create_method, create_method_kwargs, **kwargs)
-            __transaction.commit()
-            return (obj, is_new)
-        except IntegrityError as e:
-            logging.info("INTEGRITY ERROR on %r %r, %r: %r", model, create_method_kwargs, kwargs, e)
-            __transaction.rollback()
-            return (db.query(model).filter_by(**kwargs).one(), False)
-
-
-def create(db, model, create_method='', create_method_kwargs=None, **kwargs):
-    kwargs.update(create_method_kwargs or {})
-    created = getattr(model, create_method, model)(**kwargs)
-    db.add(created)
-    db.flush()
-    return (created, True)
 
 
 class SessionManager:
@@ -170,38 +122,6 @@ class SessionManager:
     @classmethod
     def initialize_data(cls, session):
         pass
-
-
-class LibraryType(object):
-    """Constant container for library types.
-    This is as defined here:
-    https://github.com/NYPL-Simplified/Simplified/wiki/LibraryRegistryPublicAPI#the-subject-scheme-for-library-types
-    """
-
-    SCHEME_URI = "http://librarysimplified.org/terms/library-types"
-    LOCAL = "local"
-    COUNTY = "county"
-    STATE = "state"
-    PROVINCE = "province"
-    NATIONAL = "national"
-    UNIVERSAL = "universal"
-
-    # Different nations use different terms for referring to their
-    # administrative divisions, which translates into different terms in
-    # the library type vocabulary.
-    ADMINISTRATIVE_DIVISION_TYPES = {
-        "US": STATE,
-        "CA": PROVINCE,
-    }
-
-    NAME_FOR_CODE = {
-        LOCAL: "Local library",
-        COUNTY: "County library",
-        STATE: "State library",
-        PROVINCE: "Provincial library",
-        NATIONAL: "National library",
-        UNIVERSAL: "Online library",
-    }
 
 
 class Library(Base):
@@ -593,7 +513,7 @@ class Library(Base):
 
     @classmethod
     def search_new(cls, db_session, query_string, location=None, production=True):
-        sq_obj = LibrarySearchQuery(query_string)
+        sq_obj = LSQuery(query_string)
 
         if not sq_obj and not location:
             return []       # We don't have a valid search or a known user location, nothing to do
