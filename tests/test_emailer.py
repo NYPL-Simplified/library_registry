@@ -3,7 +3,7 @@ import pytest
 from . import DatabaseTest
 from email.mime.text import MIMEText
 
-from config import CannotLoadConfiguration
+from config import CannotLoadConfiguration, CannotSendEmail
 from emailer import (
     Emailer,
     EmailTemplate,
@@ -83,6 +83,13 @@ class MockEmailer(Emailer):
 
     def _send_email(self, to_address, body, smtp):
         self.emails.append((to_address, body, smtp))
+
+
+class MockBrokenEmailer(Emailer):
+    """Raise a generic Exception when _send_email() is called"""
+
+    def _send_email(*args):
+        raise Exception("message from MockBrokenEmailer")
 
 
 class TestEmailer(DatabaseTest):
@@ -281,6 +288,18 @@ class TestEmailer(DatabaseTest):
             print(phrase)
             assert phrase in body
         assert smtp == mock_smtp
+
+    def test_send_failure(self):
+        """
+        GIVEN: An Emailer whose _send_email method raises an Exception
+        WHEN:  The send() method catches that exception
+        THEN:  A more specific exception should be raised
+        """
+        self._integration()
+        emailer = MockBrokenEmailer.from_sitewide_integration(self._db)
+        emailer.templates['some_email'] = EmailTemplate("subject", "Hello.")
+        with pytest.raises(CannotSendEmail):
+            emailer.send("some_email", "me@domain.tld")
 
     def test__send_email(self):
         """Verify that send_email calls certain methods on smtplib.SMTP."""

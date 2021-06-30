@@ -70,3 +70,9 @@ INVALID_CREDENTIALS = pd(
     401,
     title=lgt("The username or password is incorrect.")
 )
+
+UNABLE_TO_NOTIFY = pd(
+    "http://librarysimplified.org/terms/problem/unable-to-notify",
+    500,
+    title=lgt("Registry server unable to send notification emails.")
+)

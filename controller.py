@@ -27,7 +27,7 @@ from model import (
     get_one_or_create,
     production_session,
 )
-from config import (Configuration, CannotLoadConfiguration)
+from config import (Configuration, CannotLoadConfiguration, CannotSendEmail)
 from opds import (Annotator, OPDSCatalog)
 from registrar import LibraryRegistrar
 from templates import admin as admin_template
@@ -42,6 +42,7 @@ from problem_details import (
     INVALID_CREDENTIALS,
     LIBRARY_NOT_FOUND,
     NO_AUTH_URL,
+    UNABLE_TO_NOTIFY,
 )
 
 OPENSEARCH_MEDIA_TYPE = "application/opensearchdescription+xml"
@@ -647,6 +648,10 @@ class LibraryRegistryController(BaseController):
                     return INTEGRATION_ERROR.detailed(
                         _("SMTP error while sending email to %(address)s",
                           address=hyperlink.resource.href)
+                    )
+                except CannotSendEmail:
+                    return UNABLE_TO_NOTIFY.detailed(
+                        _("The Registry was unable to send a notification email.")
                     )
 
         # Create an OPDS 2 catalog containing all available

@@ -4,7 +4,7 @@ from email.mime.text import MIMEText
 from email import charset
 import smtplib
 
-from config import CannotLoadConfiguration
+from config import CannotLoadConfiguration, CannotSendEmail
 
 # Set up an encoding/decoding between UTF-8 and quoted-printable.
 # Otherwise, the bodies of email messages will be encoded with base64
@@ -124,7 +124,11 @@ class Emailer:
         kwargs['from_address'] = self.from_address
         kwargs['to_address'] = to_address
         body = template.body(from_header, to_address, **kwargs)
-        return self._send_email(to_address, body, smtp)
+
+        try:
+            self._send_email(to_address, body, smtp)
+        except Exception as exc:
+            raise CannotSendEmail(exc)
 
     ##### Private Methods ####################################################  # noqa: E266
     def _send_email(self, to_address, body, smtp=None):
