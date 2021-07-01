@@ -287,6 +287,7 @@ class Library(Base):
     collections = relationship("CollectionSummary", backref='library')
     delegated_patron_identifiers = relationship("DelegatedPatronIdentifier", backref='library')
     hyperlinks = relationship("Hyperlink", backref='library')
+    settings = relationship("ConfigurationSetting", backref="library", lazy="joined", cascade="all, delete")
 
     ##### SQLAlchemy Field Validation ########################################  # noqa: E266
     @validates('short_name')
@@ -770,6 +771,41 @@ class Library(Base):
         link = [x for x in library.hyperlinks if x.rel == rel]
         if len(link) > 0:
             return link[0]
+
+    @classmethod
+    def patron_counts_by_library(self, _db, libraries):
+        """Determine the number of registered Adobe Account IDs
+        (~patrons) for each of the given libraries.
+
+        :param _db: A database connection.
+        :param libraries: A list of Library objects.
+        :return: A dictionary mapping library IDs to patron counts.
+        """
+        # The concept of 'patron count' only makes sense for production libraries.
+        library_ids = [lib.id for lib in libraries if lib.in_production]
+
+        # Run the SQL query.
+        counts = select(
+            [
+                DelegatedPatronIdentifier.library_id,
+                func.count(DelegatedPatronIdentifier.id)
+            ],
+        ).where(
+            and_(DelegatedPatronIdentifier.type == DelegatedPatronIdentifier.ADOBE_ACCOUNT_ID,
+                 DelegatedPatronIdentifier.library_id.in_(library_ids))
+        ).group_by(
+            DelegatedPatronIdentifier.library_id
+        ).select_from(
+            DelegatedPatronIdentifier
+        )
+        rows = _db.execute(counts)
+
+        # Convert the results to a dictionary.
+        results = dict()
+        for (library_id, count) in rows:
+            results[library_id] = count
+
+        return results
 
     ##### Private Class Methods ##############################################  # noqa: E266
     @classmethod

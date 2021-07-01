@@ -608,6 +608,14 @@ class TestLibraryModel:
             db_session.delete(item)
         db_session.commit()
 
+    @pytest.mark.skip(reason="Need to implement")
+    def test_patron_counts_by_library(self):
+        """
+        GIVEN: Multiple existing Libraries, each with some number of patrons
+        WHEN:  Library.patron_counts_by_library() is passed a list of instances representing those Libraries
+        THEN:  A dictionary should be returned with library_id: count entries
+        """
+
     def test_library_service_area(self, db_session, create_test_library, create_test_place):
         """
         GIVEN: An existing Place object
