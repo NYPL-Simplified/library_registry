@@ -13,7 +13,7 @@ from sqlalchemy.orm import defer, joinedload
 
 from adobe_vendor_id import AdobeVendorIDController
 from authentication_document import AuthenticationDocument
-from config import CannotLoadConfiguration, Configuration
+from config import (CannotLoadConfiguration, CannotSendEmail, Configuration)
 from emailer import Emailer
 from model import (Admin, ConfigurationSetting, Hyperlink, Library, Place,
                    Resource, ServiceArea, Validation, get_one,
@@ -21,7 +21,7 @@ from model import (Admin, ConfigurationSetting, Hyperlink, Library, Place,
 from opds import Annotator, OPDSCatalog
 from problem_details import (AUTHENTICATION_FAILURE, INTEGRATION_ERROR,
                              INVALID_CONTACT_URI, INVALID_CREDENTIALS,
-                             LIBRARY_NOT_FOUND, NO_AUTH_URL)
+                             LIBRARY_NOT_FOUND, NO_AUTH_URL, UNABLE_TO_NOTIFY)
 from registrar import LibraryRegistrar
 from templates import admin as admin_template
 from util.app_server import HeartbeatController, catalog_response
@@ -665,6 +665,10 @@ class LibraryRegistryController(BaseController):
                 except SMTPException:       # We were unable to send the email.
                     msg = "SMTP error while sending email to %(address)s"
                     return INTEGRATION_ERROR.detailed(lgt(msg, address=hyperlink.resource.href))
+                except CannotSendEmail:
+                    return UNABLE_TO_NOTIFY.detailed(
+                        lgt("The Registry was unable to send a notification email.")
+                    )
 
         # Create an OPDS 2 catalog containing all available info about the library.
         catalog = OPDSCatalog.library_catalog(library, include_private_information=True,
