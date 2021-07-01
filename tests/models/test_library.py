@@ -5,6 +5,7 @@ import uuid
 
 import pytest
 
+from constants import LibraryType
 from model import (
     DelegatedPatronIdentifier,
     Hyperlink,
@@ -622,6 +623,45 @@ class TestLibraryModel:
 
         db_session.delete(a_library)
         db_session.delete(a_place)
+        db_session.commit()
+
+    @pytest.mark.skip(reason="Merged in from develop, needs edits")
+    def test_types(self, db_session, create_test_place, create_test_library, zip_10018, new_york_city, new_york_state):
+        """
+        GIVEN:
+        WHEN:
+        THEN:
+        """
+        postal = zip_10018
+        city = new_york_city
+        state = new_york_state
+        nation = create_test_place(db_session, external_id='CA', external_name='Canada',
+                                   place_type=Place.NATION, abbreviated_name='CA')
+        province = create_test_place(db_session, external_id="MB", external_name="Manitoba",
+                                     place_type=Place.STATE, abbreviated_name="MB", parent=nation)
+        everywhere = Place.everywhere(db_session)
+
+        # Libraries with different kinds of service areas are given different types.
+        for focus, type in (
+            (postal, LibraryType.LOCAL),
+            (city, LibraryType.LOCAL),
+            (state, LibraryType.STATE),
+            (province, LibraryType.PROVINCE),
+            (nation, LibraryType.NATIONAL),
+            (everywhere, LibraryType.UNIVERSAL)
+        ):
+            library = create_test_library(db_session, focus_areas=[focus])
+            assert focus.library_type == type
+            assert [type] == list(library.types)
+            db_session.delete(library)
+            db_session.commit()
+
+        # If a library's service area is ambiguous, it has no service area-related type.
+        library = create_test_library(db_session, library_name="library", focus_areas=[postal, province])
+        assert [] == list(library.types)
+        db_session.delete(library)
+        db_session.delete(nation)
+        db_session.delete(province)
         db_session.commit()
 
     @pytest.mark.parametrize(

@@ -337,9 +337,65 @@ class Library(Base):
         return bool(self.library_stage == self.PRODUCTION_STAGE and self.registry_stage == self.PRODUCTION_STAGE)
 
     @property
-    def service_area_name(self):
+    def types(self):
         """
-        Describe Library's service area in a short string a human would understand. Ex: "Kern County, CA"
+        Return any special types for this library.
+
+        :yield: A sequence of code constants from LibraryTypes.
+        """
+        service_area = self.service_area
+        if not service_area:
+            return
+
+        code = service_area.library_type
+
+        if code:
+            yield code
+
+        # TODO: in the future, more types, e.g. audience-based, can go here.
+
+    @property
+    def service_area(self):
+        """Return the service area of this Library, assuming there is only
+        one.
+        :return: A Place, if there is one well-defined place this
+        library serves; otherwise None.
+        """
+        everywhere = None
+
+        # Group the ServiceAreas by type.
+        by_type = defaultdict(set)
+        for a in self.service_areas:
+            if not a.place:
+                continue
+            if a.place.type == Place.EVERYWHERE:
+                # We will only return 'everywhere' if we don't find
+                # something more specific.
+                everywhere = a.place
+                continue
+            by_type[a.type].add(a)
+
+        # If there is a single focus area, use it.
+        # Otherwise, if there is a single eligibility area, use that.
+        service_area = None
+        for area_type in ServiceArea.FOCUS, ServiceArea.ELIGIBILITY:
+            if len(by_type[area_type]) == 1:
+                [service_area] = by_type[area_type]
+                if service_area.place:
+                    return service_area.place
+
+        # This library serves everywhere, and it doesn't _also_ serve
+        # some more specific place.
+        if everywhere:
+            return everywhere
+
+        # This library does not have one ServiceArea that stands out.
+        return None
+
+    @property
+    def service_area_name(self):
+        """Describe the library's service area in a short string a human would
+        understand, e.g. "Kern County, CA".
 
         This library does the best it can to express a library's service
         area as the name of a single place, but it's not always possible
@@ -349,28 +405,12 @@ class Library(Base):
         Places) as part of the query that fetches libraries, so that
         this doesn't result in extra DB queries per library.
 
-        :return: A string, or None if the library's service area can't be described as a short string.
+        :return: A string, or None if the library's service area can't be
+           described as a short string.
         """
-        by_type = defaultdict(set)
-
-        for a in self.service_areas:   # Group the ServiceAreas by type.
-            if not a.place or a.place.type == Place.EVERYWHERE:
-                continue
-
-            by_type[a.type].add(a)
-
-        # If there's a single focus area, use it.
-        # Otherwise, if there is a single eligibility area, use that.
-        service_area = None
-        for area_type in ServiceArea.FOCUS, ServiceArea.ELIGIBILITY:
-            if len(by_type[area_type]) == 1:
-                [service_area] = by_type[area_type]
-                break
-
-        if service_area:
-            return service_area.place.human_friendly_name
-
-        return None     # No single ServiceArea stands out; can't describe it with a short string
+        if self.service_area:
+            return self.service_area.human_friendly_name
+        return None
 
     ##### Class Methods ######################################################  # noqa: E266
     @classmethod
