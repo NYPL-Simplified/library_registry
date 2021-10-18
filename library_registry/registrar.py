@@ -1,22 +1,24 @@
 import base64
 import feedparser
-from flask_babel import lazy_gettext as _
 import json
 import logging
-
-from PIL import Image
 from io import BytesIO
 from urllib.parse import urljoin
 
+from PIL import Image
+from flask_babel import lazy_gettext as _
+
 from library_registry.authentication_document import AuthenticationDocument
 from library_registry.opds import OPDSCatalog
-from library_registry.model import (
-    get_one,
-    get_one_or_create,
-    Hyperlink,
-    Library,
+from library_registry.model import Hyperlink
+from library_registry.problem_details import (
+    ERROR_RETRIEVING_DOCUMENT,
+    INTEGRATION_DOCUMENT_NOT_FOUND,
+    INVALID_CONTACT_URI,
+    INVALID_INTEGRATION_DOCUMENT,
+    LIBRARY_ALREADY_IN_PRODUCTION,
+    TIMEOUT,
 )
-from library_registry.problem_details import *
 from library_registry.util.http import (
     HTTP,
     RequestTimedOut,
@@ -234,7 +236,7 @@ class LibraryRegistrar(object):
             if not allow_401 and response.status_code == 401:
                 self.log.error(
                     "Registration of %s failed: %s is behind authentication gateway",
-                    auth_url, url
+                    registration_url, url
                 )
                 return ERROR_RETRIEVING_DOCUMENT.detailed(
                     _("%(url)s is behind an authentication gateway",

@@ -1,8 +1,8 @@
+import smtplib
+from email import charset
 from email.header import Header
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-from email import charset
-import smtplib
 
 from library_registry.config import CannotLoadConfiguration, CannotSendEmail
 

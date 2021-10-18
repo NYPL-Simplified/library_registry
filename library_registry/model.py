@@ -1,25 +1,22 @@
-from collections import defaultdict
-from library_registry.config import Configuration
+import datetime
+import logging
+import json
+import random
+import re
+import string
+import uszipcode
+import uuid
+import warnings
+from collections import Counter, defaultdict
+
 from flask_babel import lazy_gettext as _
 from flask_bcrypt import (
     check_password_hash,
     generate_password_hash
 )
-import datetime
-import logging
-
-import os
-import re
-import json
-import random
-import string
-import uszipcode
-import uuid
-import warnings
-from collections import Counter
+from geoalchemy2 import Geography, Geometry
 from psycopg2.extensions import adapt as sqlescape
 from sqlalchemy import (
-    Binary,
     Boolean,
     Column,
     DateTime,
@@ -30,23 +27,13 @@ from sqlalchemy import (
     String,
     Table,
     Unicode,
-)
-from sqlalchemy import (
     create_engine,
     exc as sa_exc,
     func,
-    or_,
     UniqueConstraint,
 )
-from sqlalchemy.exc import (
-    IntegrityError
-)
-from sqlalchemy.ext.declarative import (
-    declarative_base
-)
-from sqlalchemy.ext.hybrid import (
-    hybrid_property,
-)
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import (
     aliased,
     backref,
@@ -54,10 +41,7 @@ from sqlalchemy.orm import (
     sessionmaker,
     validates,
 )
-from sqlalchemy.orm.exc import (
-    NoResultFound,
-    MultipleResultsFound,
-)
+from sqlalchemy.orm.exc import MultipleResultsFound
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql import compiler
 from sqlalchemy.sql.expression import (
@@ -70,18 +54,14 @@ from sqlalchemy.sql.expression import (
     join,
     outerjoin,
 )
-from sqlalchemy.ext.hybrid import hybrid_property
 
-from geoalchemy2 import Geography, Geometry
-
+from library_registry.config import Configuration
 from library_registry.emailer import Emailer
-from library_registry.model_helpers import (create, generate_secret, get_one, get_one_or_create)
+from library_registry.model_helpers import create, generate_secret, get_one, get_one_or_create
 from library_registry.util.language import LanguageCodes
-from library_registry.util import (
-    GeometryUtility,
-)
+from library_registry.util import GeometryUtility
 from library_registry.util.short_client_token import ShortClientTokenTool
-from library_registry.util.string_helpers import random_string
+
 
 def production_session():
     url = Configuration.database_url()

@@ -1,22 +1,19 @@
 """Implement logic common to more than one of the Simplified applications."""
+import logging
+import sys
+import traceback
+from functools import wraps
+
 from psycopg2 import DatabaseError
 import flask
-import json
-import sys
+
 from lxml import etree
-from functools import wraps
 from flask import make_response
 from flask_babel import lazy_gettext as _
-from library_registry.util.flask_util import problem
+
 from library_registry.util.problem_detail import ProblemDetail
-import traceback
-import logging
 from library_registry.opds import OPDSCatalog
 
-from sqlalchemy.orm.session import Session
-from sqlalchemy.orm.exc import (
-    NoResultFound,
-)
 
 def catalog_response(catalog, cache_for=OPDSCatalog.CACHE_TIME):
     content_type = OPDSCatalog.OPDS_TYPE

@@ -1,6 +1,5 @@
 import os
 from collections import defaultdict
-
 from pkg_resources import resource_string
 
 

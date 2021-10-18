@@ -1,11 +1,8 @@
 
 import argparse
-import base64
 import json
 import logging
 import os
-import re
-import requests
 import sys
 
 from library_registry.geometry_loader import GeometryLoader
@@ -28,6 +25,7 @@ from library_registry.emailer import (
 )
 from library_registry.registrar import LibraryRegistrar
 from library_registry.util.problem_detail import ProblemDetail
+
 
 class Script(object):
 

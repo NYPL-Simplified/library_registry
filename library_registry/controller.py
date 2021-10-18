@@ -1,17 +1,15 @@
 import json
 import logging
 import time
-import flask
 from smtplib import SMTPException
 from urllib.parse import unquote
 
-from flask import (Response, redirect, render_template_string,
-                   request, url_for, session)
-from flask_babel import lazy_gettext as _
-from sqlalchemy.orm import (defer, joinedload)
-
+import flask
 from Crypto.PublicKey import RSA
 from Crypto.Cipher import PKCS1_OAEP
+from flask import (Response, redirect, render_template_string, request, url_for, session)
+from flask_babel import lazy_gettext as _
+from sqlalchemy.orm import (defer, joinedload)
 
 from library_registry.adobe_vendor_id import AdobeVendorIDController
 from library_registry.authentication_document import AuthenticationDocument

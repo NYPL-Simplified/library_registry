@@ -1,7 +1,8 @@
-import flask
 import gzip
-from io import BytesIO
 from functools import wraps
+from io import BytesIO
+
+import flask
 
 from library_registry.util import GeometryUtility
 from library_registry.util.problem_detail import ProblemDetail

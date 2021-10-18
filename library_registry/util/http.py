@@ -1,7 +1,9 @@
 import logging
-import requests
 import urllib.parse
+
 from flask_babel import lazy_gettext as _
+import requests
+
 from library_registry.util.problem_detail import (
     ProblemDetail as pd,
     JSON_MEDIA_TYPE as PROBLEM_DETAIL_JSON_MEDIA_TYPE,

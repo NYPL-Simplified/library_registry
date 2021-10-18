@@ -1,11 +1,12 @@
-from collections import defaultdict
 import json
+from collections import defaultdict
 
 from flask_babel import lazy_gettext as _
 from sqlalchemy.orm.exc import (
     MultipleResultsFound,
     NoResultFound,
 )
+from sqlalchemy.orm.session import Session
 
 from library_registry.model import (
     Audience,
@@ -14,9 +15,7 @@ from library_registry.model import (
     ServiceArea,
 )
 from library_registry.model_helpers import (get_one_or_create)
-
 from library_registry.problem_details import INVALID_INTEGRATION_DOCUMENT
-from sqlalchemy.orm.session import Session
 
 
 class AuthenticationDocument(object):

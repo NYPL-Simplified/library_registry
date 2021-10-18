@@ -2,7 +2,10 @@ import json
 
 from library_registry.authentication_document import AuthenticationDocument
 from library_registry.opds import OPDSCatalog
-from library_registry.problem_details import *
+from library_registry.problem_details import (
+    INVALID_CONTACT_URI,
+    NO_AUTH_URL,
+)
 from library_registry.registrar import LibraryRegistrar
 from testing import (
     DatabaseTest,
