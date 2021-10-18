@@ -8,13 +8,13 @@ from . import (
 from library_registry.authentication_document import AuthenticationDocument
 from library_registry.config import Configuration
 from library_registry.model import (
-    create,
     ConfigurationSetting,
     Hyperlink,
     Library,
     LibraryType,
     Validation,
 )
+from library_registry.model_helpers import create
 from library_registry.opds import OPDSCatalog
 
 

@@ -10,8 +10,6 @@ import sys
 
 from library_registry.geometry_loader import GeometryLoader
 from library_registry.model import (
-    get_one,
-    get_one_or_create,
     production_session,
     Place,
     Library,
@@ -20,6 +18,7 @@ from library_registry.model import (
     ConfigurationSetting,
     ExternalIntegration,
 )
+from library_registry.model_helpers import (get_one, get_one_or_create)
 from library_registry.config import Configuration
 from library_registry.adobe_vendor_id import AdobeVendorIDClient
 from library_registry.authentication_document import AuthenticationDocument

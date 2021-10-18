@@ -32,9 +32,6 @@ from library_registry.controller import (
 from library_registry.emailer import Emailer, EmailTemplate
 from library_registry.opds import OPDSCatalog
 from library_registry.model import (
-    create,
-    get_one,
-    get_one_or_create,
     ConfigurationSetting,
     DelegatedPatronIdentifier,
     ExternalIntegration,
@@ -43,6 +40,11 @@ from library_registry.model import (
     Place,
     ServiceArea,
     Validation,
+)
+from library_registry.model_helpers import (
+    create,
+    get_one,
+    get_one_or_create,
 )
 from library_registry.util.http import RequestTimedOut
 from library_registry.problem_details import (

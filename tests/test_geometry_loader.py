@@ -3,11 +3,10 @@ from io import StringIO
 from sqlalchemy import func
 from geoalchemy2 import Geography
 from library_registry.model import (
-    get_one,
-    get_one_or_create,
     Place,
     PlaceAlias,
 )
+from library_registry.model_helpers import (get_one_or_create)
 
 from . import (
     DatabaseTest,

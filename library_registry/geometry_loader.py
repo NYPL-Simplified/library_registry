@@ -4,10 +4,10 @@ from sqlalchemy import func
 from sqlalchemy.sql.expression import cast
 
 from library_registry.model import (
-    get_one_or_create,
     Place,
     PlaceAlias,
 )
+from library_registry.model_helpers import (get_one_or_create)
 from library_registry.util import GeometryUtility
 
 class GeometryLoader(object):

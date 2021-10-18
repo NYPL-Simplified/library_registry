@@ -75,6 +75,7 @@ from sqlalchemy.ext.hybrid import hybrid_property
 from geoalchemy2 import Geography, Geometry
 
 from library_registry.emailer import Emailer
+from library_registry.model_helpers import (create, generate_secret, get_one, get_one_or_create)
 from library_registry.util.language import LanguageCodes
 from library_registry.util import (
     GeometryUtility,
@@ -100,9 +101,6 @@ def production_session():
 
 DEBUG = False
 
-def generate_secret():
-    """Generate a random secret."""
-    return random_string(24)
 
 class SessionManager(object):
 
@@ -147,23 +145,6 @@ class SessionManager(object):
     def initialize_data(cls, session):
         pass
 
-def get_one(db, model, on_multiple='error', **kwargs):
-    q = db.query(model).filter_by(**kwargs)
-    try:
-        return q.one()
-    except MultipleResultsFound as e:
-        if on_multiple == 'error':
-            raise e
-        elif on_multiple == 'interchangeable':
-            # These records are interchangeable so we can use
-            # whichever one we want.
-            #
-            # This may be a sign of a problem somewhere else. A
-            # database-level constraint might be useful.
-            q = q.limit(1)
-            return q.one()
-    except NoResultFound:
-        return None
 
 def dump_query(query):
     dialect = query.session.bind.dialect
@@ -178,36 +159,6 @@ def dump_query(query):
         params[k] = sqlescape(v)
     return (comp.string.encode(enc) % params).decode(enc)
 
-def get_one_or_create(db, model, create_method='',
-                      create_method_kwargs=None,
-                      **kwargs):
-    one = get_one(db, model, **kwargs)
-    if one:
-        return one, False
-    else:
-        __transaction = db.begin_nested()
-        try:
-            if 'on_multiple' in kwargs:
-                # This kwarg is supported by get_one() but not by create().
-                del kwargs['on_multiple']
-            obj = create(db, model, create_method, create_method_kwargs, **kwargs)
-            __transaction.commit()
-            return obj
-        except IntegrityError as e:
-            logging.info(
-                "INTEGRITY ERROR on %r %r, %r: %r", model, create_method_kwargs,
-                kwargs, e)
-            __transaction.rollback()
-            return db.query(model).filter_by(**kwargs).one(), False
-
-def create(db, model, create_method='',
-           create_method_kwargs=None,
-           **kwargs):
-    kwargs.update(create_method_kwargs or {})
-    created = getattr(model, create_method, model)(**kwargs)
-    db.add(created)
-    db.flush()
-    return created, True
 
 Base = declarative_base()
 

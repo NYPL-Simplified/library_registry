@@ -1,4 +1,5 @@
 from datetime import datetime
+import json
 import logging
 import os
 
@@ -15,7 +16,6 @@ from io import BytesIO
 from library_registry.config import Configuration
 from library_registry.log import LogConfiguration
 from library_registry.model import (
-    get_one_or_create,
     Admin,
     Audience,
     Base,
@@ -29,6 +29,7 @@ from library_registry.model import (
     SessionManager,
 )
 from library_registry.util import GeometryUtility
+from library_registry.model_helpers import (get_one_or_create)
 from library_registry.util.http import BadResponseException
 
 
@@ -122,7 +123,7 @@ class DatabaseTest(object):
     @property
     def _time(self):
         v = self.time_counter
-        self.time_counter = self.time_counter + timedelta(days=1)
+        self.time_counter = self.time_counter + datetime.timedelta(days=1)
         return v
 
     def _admin(self, username=None, password=None):

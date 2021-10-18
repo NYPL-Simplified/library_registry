@@ -14,8 +14,8 @@ from library_registry.config import Configuration
 from library_registry.model import (
     DelegatedPatronIdentifier,
     ExternalIntegration,
-    create,
 )
+from library_registry.model_helpers import create
 from library_registry.util.short_client_token import ShortClientTokenEncoder
 from library_registry.util.string_helpers import base64
 

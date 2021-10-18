@@ -25,10 +25,9 @@ from library_registry.model import (
     Resource,
     ServiceArea,
     Validation,
-    get_one,
-    get_one_or_create,
     production_session,
 )
+from library_registry.model_helpers import (get_one, get_one_or_create)
 from library_registry.config import (Configuration, CannotLoadConfiguration, CannotSendEmail)
 from library_registry.opds import (Annotator, OPDSCatalog)
 from library_registry.registrar import LibraryRegistrar

@@ -10,9 +10,8 @@ from library_registry.model import (
     Library,
     Place,
     ServiceArea,
-    create,
-    get_one,
 )
+from library_registry.model_helpers import (create, get_one)
 from library_registry.problem_details import INVALID_INTEGRATION_DOCUMENT
 from library_registry.registrar import LibraryRegistrar
 from library_registry.scripts import (

@@ -12,9 +12,6 @@ import pytest
 from library_registry.config import Configuration
 from library_registry.emailer import Emailer
 from library_registry.model import (
-    create,
-    get_one,
-    get_one_or_create,
     Admin,
     Audience,
     CollectionSummary,
@@ -29,6 +26,7 @@ from library_registry.model import (
     PlaceAlias,
     Validation,
 )
+from library_registry.model_helpers import (create, get_one_or_create)
 from library_registry.util import (
     GeometryUtility
 )

@@ -8,12 +8,12 @@ from sqlalchemy.orm.exc import (
 )
 
 from library_registry.model import (
-    get_one_or_create,
     Audience,
     CollectionSummary,
     Place,
     ServiceArea,
 )
+from library_registry.model_helpers import (get_one_or_create)
 
 from library_registry.problem_details import INVALID_INTEGRATION_DOCUMENT
 from sqlalchemy.orm.session import Session
