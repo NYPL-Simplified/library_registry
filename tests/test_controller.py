@@ -16,11 +16,11 @@ from Crypto.Cipher import PKCS1_OAEP
 
 from . import DatabaseTest
 from testing import DummyHTTPClient
-from util import GeometryUtility
-from util.problem_detail import ProblemDetail
+from library_registry.util import GeometryUtility
+from library_registry.util.problem_detail import ProblemDetail
 
-from authentication_document import AuthenticationDocument
-from controller import (
+from library_registry.authentication_document import AuthenticationDocument
+from library_registry.controller import (
     AdobeVendorIDController,
     BaseController,
     CoverageController,
@@ -29,12 +29,9 @@ from controller import (
     LibraryRegistryController,
     ValidationController,
 )
-from emailer import Emailer, EmailTemplate
-from opds import OPDSCatalog
-from model import (
-    create,
-    get_one,
-    get_one_or_create,
+from library_registry.emailer import Emailer, EmailTemplate
+from library_registry.opds import OPDSCatalog
+from library_registry.model import (
     ConfigurationSetting,
     DelegatedPatronIdentifier,
     ExternalIntegration,
@@ -44,8 +41,9 @@ from model import (
     ServiceArea,
     Validation,
 )
-from util.http import RequestTimedOut
-from problem_details import (
+from library_registry.model_helpers import (create, get_one, get_one_or_create)
+from library_registry.util.http import RequestTimedOut
+from library_registry.problem_details import (
     ERROR_RETRIEVING_DOCUMENT,
     INTEGRATION_DOCUMENT_NOT_FOUND,
     INTEGRATION_ERROR,
@@ -56,11 +54,12 @@ from problem_details import (
     TIMEOUT,
     UNABLE_TO_NOTIFY,
 )
-from config import Configuration
+from library_registry.config import Configuration
 
 
 class MockLibraryRegistry(LibraryRegistry):
     pass
+
 
 class MockEmailer(Emailer):
 
@@ -101,7 +100,7 @@ class ControllerTest(DatabaseTest):
 
     def vendor_id_setup(self):
         """Configure a basic vendor id service."""
-        integration, ignore = get_one_or_create(
+        (integration, _) = get_one_or_create(
             self._db, ExternalIntegration,
             protocol=ExternalIntegration.ADOBE_VENDOR_ID,
             goal=ExternalIntegration.DRM_GOAL,
@@ -120,7 +119,7 @@ class TestLibraryRegistryAnnotator(ControllerTest):
     def test_annotate_catalog(self):
         annotator = LibraryRegistryAnnotator(self.app.library_registry)
 
-        integration, ignore = create(
+        (integration, _) = create(
             self._db, ExternalIntegration,
             protocol=ExternalIntegration.ADOBE_VENDOR_ID,
             goal=ExternalIntegration.DRM_GOAL,
@@ -1829,17 +1828,17 @@ class TestValidationController(ControllerTest):
         # validation process.
         library = self._library()
 
-        link1, ignore = library.set_hyperlink("rel", "mailto:1@library.org")
+        (link1, _) = library.set_hyperlink("rel", "mailto:1@library.org")
         needs_validation = link1.resource
         needs_validation.restart_validation()
         secret = needs_validation.validation.secret
 
-        link2, ignore = library.set_hyperlink("rel2", "mailto:2@library.org")
+        (link2, _) = library.set_hyperlink("rel2", "mailto:2@library.org")
         needs_validation_2 = link2.resource
         needs_validation_2.restart_validation()
         secret2 = needs_validation_2.validation.secret
 
-        link3, ignore = library.set_hyperlink("rel2", "mailto:3@library.org")
+        (link3, _) = library.set_hyperlink("rel2", "mailto:3@library.org")
         not_started = link3.resource
 
         # Simple tests for missing fields or failed lookups.

@@ -1,7 +1,7 @@
 import json
 
-import adobe_xml_templates as t
-from adobe_vendor_id import (
+import library_registry.adobe_xml_templates as t
+from library_registry.adobe_vendor_id import (
     AdobeSignInRequestParser,
     AdobeAccountInfoRequestParser,
     AdobeVendorIDClient,
@@ -10,16 +10,14 @@ from adobe_vendor_id import (
     VendorIDAuthenticationError,
     VendorIDServerException,
 )
-from config import Configuration
-from model import (
+from library_registry.config import Configuration
+from library_registry.model import (
     DelegatedPatronIdentifier,
     ExternalIntegration,
     create,
 )
-from util.short_client_token import ShortClientTokenEncoder
-from util.string_helpers import base64
-
-from . import DatabaseTest
+from library_registry.util.short_client_token import ShortClientTokenEncoder
+from library_registry.util.string_helpers import base64
 
 
 class MockAdobeVendorIDClient(AdobeVendorIDClient):
@@ -61,13 +59,13 @@ class TestAdobeVendorIdController:
         ...
 
 
-class VendorIDTest(DatabaseTest):
+class VendorIDTest:
     NODE_VALUE = "0x685b35c00f05"
 
     def _integration(self):
         """Configure a basic Vendor ID Service setup."""
 
-        integration, ignore = create(
+        (integration, _) = create(
             self._db, ExternalIntegration,
             protocol=ExternalIntegration.ADOBE_VENDOR_ID,
             goal=ExternalIntegration.DRM_GOAL,
