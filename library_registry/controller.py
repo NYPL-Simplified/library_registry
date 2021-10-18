@@ -13,6 +13,10 @@ from sqlalchemy.orm import (defer, joinedload)
 
 from library_registry.adobe_vendor_id import AdobeVendorIDController
 from library_registry.authentication_document import AuthenticationDocument
+from library_registry.constants import (
+    OPENSEARCH_MEDIA_TYPE,
+    OPDS_CATALOG_REGISTRATION_MEDIA_TYPE,
+)
 from library_registry.emailer import Emailer
 from library_registry.model import (
     Admin,
@@ -42,11 +46,6 @@ from library_registry.problem_details import (
     LIBRARY_NOT_FOUND,
     NO_AUTH_URL,
     UNABLE_TO_NOTIFY,
-)
-
-OPENSEARCH_MEDIA_TYPE = "application/opensearchdescription+xml"
-OPDS_CATALOG_REGISTRATION_MEDIA_TYPE = (
-    "application/opds+json;profile=https://librarysimplified.org/rel/profile/directory"
 )
 
 

@@ -5,10 +5,10 @@ from sqlalchemy.orm import Query
 
 from library_registry.authentication_document import AuthenticationDocument
 from library_registry.config import Configuration
+from library_registry.constants import LibraryType
 from library_registry.model import (
     ConfigurationSetting,
     Hyperlink,
-    LibraryType,
     Validation,
 )
 

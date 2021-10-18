@@ -8,6 +8,7 @@ from sqlalchemy.orm.exc import (
 )
 from sqlalchemy.orm.session import Session
 
+from library_registry.constants import (AUTHENTICATION_DOCUMENT_MEDIA_TYPE, OPDS_CATALOG_MEDIA_TYPE)
 from library_registry.model import (
     Audience,
     CollectionSummary,
@@ -26,7 +27,7 @@ class AuthenticationDocument(object):
 
     ANONYMOUS_ACCESS_REL = "https://librarysimplified.org/rel/auth/anonymous"
     AUTHENTICATION_DOCUMENT_REL = "http://opds-spec.org/auth/document"
-    MEDIA_TYPE = "application/vnd.opds.authentication.v1.0+json"
+    MEDIA_TYPE = AUTHENTICATION_DOCUMENT_MEDIA_TYPE
 
     COVERAGE_EVERYWHERE = "everywhere"
 
@@ -61,7 +62,7 @@ class AuthenticationDocument(object):
         self.online_registration = self.has_link(rel="register")
         self.root = self.extract_link(
             rel="start",
-            prefer_type="application/atom+xml;profile=opds-catalog"
+            prefer_type=OPDS_CATALOG_MEDIA_TYPE
         )
         logo = self.extract_link(rel="logo")
         self.logo = None

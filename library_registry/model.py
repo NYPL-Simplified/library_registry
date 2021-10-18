@@ -56,6 +56,16 @@ from sqlalchemy.sql.expression import (
 )
 
 from library_registry.config import Configuration
+from library_registry.constants import (
+    LibraryType,
+    PLACE_CITY,
+    PLACE_COUNTY,
+    PLACE_EVERYWHERE,
+    PLACE_LIBRARY_SERVICE_AREA,
+    PLACE_NATION,
+    PLACE_POSTAL_CODE,
+    PLACE_STATE,
+)
 from library_registry.emailer import Emailer
 from library_registry.model_helpers import create, generate_secret, get_one, get_one_or_create
 from library_registry.util.language import LanguageCodes
@@ -142,38 +152,6 @@ def dump_query(query):
 
 Base = declarative_base()
 
-class LibraryType(object):
-    """Constant container for library types.
-
-    This is as defined here:
-
-    https://github.com/NYPL-Simplified/Simplified/wiki/LibraryRegistryPublicAPI#the-subject-scheme-for-library-types
-    """
-
-    SCHEME_URI = "http://librarysimplified.org/terms/library-types"
-    LOCAL = "local"
-    COUNTY = "county"
-    STATE = "state"
-    PROVINCE = "province"
-    NATIONAL = "national"
-    UNIVERSAL = "universal"
-
-    # Different nations use different terms for referring to their
-    # administrative divisions, which translates into different terms in
-    # the library type vocabulary.
-    ADMINISTRATIVE_DIVISION_TYPES = {
-        "US": STATE,
-        "CA" : PROVINCE,
-    }
-
-    NAME_FOR_CODE = {
-        LOCAL: "Local library",
-        COUNTY: "County library",
-        STATE: "State library",
-        PROVINCE: "Provincial library",
-        NATIONAL: "National library",
-        UNIVERSAL: "Online library",
-    }
 
 class Library(Base):
     """An entry in this table corresponds more or less to an OPDS server.
@@ -1143,13 +1121,13 @@ class Place(Base):
     # Countries that call their top-level administrative divisions something
     # other than 'states' can still use 'state' as their type. (But see
     # LibraryType.ADMINISTRATIVE_DIVISION_TYPES.)
-    NATION = 'nation'
-    STATE = 'state'
-    COUNTY = 'county'
-    CITY = 'city'
-    POSTAL_CODE = 'postal_code'
-    LIBRARY_SERVICE_AREA = 'library_service_area'
-    EVERYWHERE = 'everywhere'
+    NATION                  = PLACE_NATION                  # noqa: E221
+    STATE                   = PLACE_STATE                   # noqa: E221
+    COUNTY                  = PLACE_COUNTY                  # noqa: E221
+    CITY                    = PLACE_CITY                    # noqa: E221
+    POSTAL_CODE             = PLACE_POSTAL_CODE             # noqa: E221
+    LIBRARY_SERVICE_AREA    = PLACE_LIBRARY_SERVICE_AREA    # noqa: E221
+    EVERYWHERE              = PLACE_EVERYWHERE              # noqa: E221
 
     id = Column(Integer, primary_key=True)
 
