@@ -3,13 +3,13 @@ import logging
 import pytest
 
 from . import DatabaseTest
-from log import (
+from library_registry.log import (
     StringFormatter,
     JSONFormatter,
     LogglyHandler,
     LogConfiguration,
 )
-from model import (
+from library_registry.model import (
     ExternalIntegration,
 )
     

@@ -7,13 +7,13 @@ from flask import Flask, Response
 from flask_babel import Babel
 from flask_sqlalchemy_session import flask_scoped_session
 
-from config import Configuration
-from controller import LibraryRegistry
-from log import LogConfiguration
-from model import SessionManager, ConfigurationSetting
+from library_registry.config import Configuration
+from library_registry.controller import LibraryRegistry
+from library_registry.log import LogConfiguration
+from library_registry.model import SessionManager, ConfigurationSetting
 
-from util.app_server import returns_problem_detail, returns_json_or_response_or_problem_detail
-from app_helpers import (
+from library_registry.util.app_server import returns_problem_detail, returns_json_or_response_or_problem_detail
+from library_registry.app_helpers import (
     compressible,
     has_library_factory,
     uses_location_factory,

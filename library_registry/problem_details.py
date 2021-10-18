@@ -1,4 +1,4 @@
-from util.problem_detail import ProblemDetail as pd
+from library_registry.util.problem_detail import ProblemDetail as pd
 from flask_babel import lazy_gettext as lgt
 
 AUTHENTICATION_FAILURE = pd(

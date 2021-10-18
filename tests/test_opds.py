@@ -5,9 +5,9 @@ from . import (
     DatabaseTest,
 )
 
-from authentication_document import AuthenticationDocument
-from config import Configuration
-from model import (
+from library_registry.authentication_document import AuthenticationDocument
+from library_registry.config import Configuration
+from library_registry.model import (
     create,
     ConfigurationSetting,
     Hyperlink,
@@ -15,7 +15,7 @@ from model import (
     LibraryType,
     Validation,
 )
-from opds import OPDSCatalog
+from library_registry.opds import OPDSCatalog
 
 
 class TestOPDSCatalog(DatabaseTest):

@@ -7,11 +7,11 @@ from lxml import etree
 from functools import wraps
 from flask import make_response
 from flask_babel import lazy_gettext as _
-from util.flask_util import problem
-from util.problem_detail import ProblemDetail
+from library_registry.util.flask_util import problem
+from library_registry.util.problem_detail import ProblemDetail
 import traceback
 import logging
-from opds import OPDSCatalog
+from library_registry.opds import OPDSCatalog
 
 from sqlalchemy.orm.session import Session
 from sqlalchemy.orm.exc import (

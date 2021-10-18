@@ -3,7 +3,7 @@ import json
 import flask
 from sqlalchemy.orm import Query
 
-from model import (
+from library_registry.model import (
     ConfigurationSetting,
     Hyperlink,
     LibraryType,
@@ -11,8 +11,8 @@ from model import (
     Validation,
 )
 
-from authentication_document import AuthenticationDocument
-from config import Configuration
+from library_registry.authentication_document import AuthenticationDocument
+from library_registry.config import Configuration
 
 class Annotator(object):
 

@@ -1,7 +1,7 @@
 # encoding: utf-8
 import pytest
 
-from util.language import LanguageCodes
+from library_registry.util.language import LanguageCodes
 
 
 class TestLanguageCodes(object):

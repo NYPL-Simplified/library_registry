@@ -3,7 +3,7 @@ import logging
 import json
 import os
 import socket
-from config import Configuration
+from library_registry.config import Configuration
 from io import StringIO
 from loggly.handlers import HTTPSHandler as LogglyHandler
 
@@ -138,7 +138,7 @@ class LogConfiguration(object):
          message_template) = cls._defaults(testing)
 
         handlers = []
-        from model import ExternalIntegration
+        from library_registry.model import ExternalIntegration
         if _db and not testing:
             goal = ExternalIntegration.LOGGING_GOAL
             internal = ExternalIntegration.lookup(

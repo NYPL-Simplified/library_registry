@@ -3,8 +3,8 @@ import logging
 
 import pytest
 
-from util.short_client_token import ShortClientTokenEncoder
-from model import (
+from library_registry.util.short_client_token import ShortClientTokenEncoder
+from library_registry.model import (
     DelegatedPatronIdentifier,
     ShortClientTokenDecoder,
 )

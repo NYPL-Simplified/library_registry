@@ -5,15 +5,15 @@ from sqlalchemy.orm.exc import (
     MultipleResultsFound,
     NoResultFound,
 )
-from authentication_document import AuthenticationDocument
+from library_registry.authentication_document import AuthenticationDocument
 from . import DatabaseTest
-from model import (
+from library_registry.model import (
     Audience,
     Place,
     ServiceArea,
 )
-from util.problem_detail import ProblemDetail
-from problem_details import INVALID_INTEGRATION_DOCUMENT
+from library_registry.util.problem_detail import ProblemDetail
+from library_registry.problem_details import INVALID_INTEGRATION_DOCUMENT
 from testing import MockPlace
 
 # Alias for a long class name

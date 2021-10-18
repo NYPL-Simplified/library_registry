@@ -12,9 +12,9 @@ from sqlalchemy.orm.exc import (
 )
 from io import BytesIO
 
-from config import Configuration
-from log import LogConfiguration
-from model import (
+from library_registry.config import Configuration
+from library_registry.log import LogConfiguration
+from library_registry.model import (
     get_one_or_create,
     Admin,
     Audience,
@@ -28,8 +28,8 @@ from model import (
     ServiceArea,
     SessionManager,
 )
-from util import GeometryUtility
-from util.http import BadResponseException
+from library_registry.util import GeometryUtility
+from library_registry.util.http import BadResponseException
 
 
 def package_setup():

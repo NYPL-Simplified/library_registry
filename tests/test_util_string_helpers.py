@@ -5,7 +5,7 @@ import re
 
 import pytest
 
-from util.string_helpers import (
+from library_registry.util.string_helpers import (
     UnicodeAwareBase64,
     base64,
     random_string

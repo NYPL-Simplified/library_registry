@@ -3,7 +3,7 @@ import json
 
 import pytest
 
-from util.http import (
+from library_registry.util.http import (
     HTTP,
     BadResponseException,
     RemoteIntegrationException,

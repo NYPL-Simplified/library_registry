@@ -1,5 +1,5 @@
 from collections import defaultdict
-from config import Configuration
+from library_registry.config import Configuration
 from flask_babel import lazy_gettext as _
 from flask_bcrypt import (
     check_password_hash,
@@ -74,13 +74,13 @@ from sqlalchemy.ext.hybrid import hybrid_property
 
 from geoalchemy2 import Geography, Geometry
 
-from emailer import Emailer
-from util.language import LanguageCodes
-from util import (
+from library_registry.emailer import Emailer
+from library_registry.util.language import LanguageCodes
+from library_registry.util import (
     GeometryUtility,
 )
-from util.short_client_token import ShortClientTokenTool
-from util.string_helpers import random_string
+from library_registry.util.short_client_token import ShortClientTokenTool
+from library_registry.util.string_helpers import random_string
 
 def production_session():
     url = Configuration.database_url()
@@ -94,7 +94,7 @@ def production_session():
     # incorrectly, but 1) this method isn't normally called during
     # unit tests, and 2) package_setup() will call initialize() again
     # with the right arguments.
-    from log import LogConfiguration
+    from library_registry.log import LogConfiguration
     LogConfiguration.initialize(_db)
     return _db
 

@@ -1,4 +1,4 @@
-from util import GeometryUtility
+from library_registry.util import GeometryUtility
 
 class TestGeometryUtility(object):
 

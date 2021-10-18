@@ -1,14 +1,14 @@
 import json
 
-from authentication_document import AuthenticationDocument
-from opds import OPDSCatalog
-from problem_details import *
-from registrar import LibraryRegistrar
+from library_registry.authentication_document import AuthenticationDocument
+from library_registry.opds import OPDSCatalog
+from library_registry.problem_details import *
+from library_registry.registrar import LibraryRegistrar
 from testing import (
     DatabaseTest,
     DummyHTTPResponse,
 )
-from util.problem_detail import ProblemDetail
+from library_registry.util.problem_detail import ProblemDetail
 
 
 class TestRegistrar(DatabaseTest):

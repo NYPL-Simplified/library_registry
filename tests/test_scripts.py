@@ -2,9 +2,9 @@ import json
 import pytest
 from io import StringIO
 
-from config import Configuration
-from emailer import Emailer
-from model import (
+from library_registry.config import Configuration
+from library_registry.emailer import Emailer
+from library_registry.model import (
     ConfigurationSetting,
     ExternalIntegration,
     Library,
@@ -13,9 +13,9 @@ from model import (
     create,
     get_one,
 )
-from problem_details import INVALID_INTEGRATION_DOCUMENT
-from registrar import LibraryRegistrar
-from scripts import (
+from library_registry.problem_details import INVALID_INTEGRATION_DOCUMENT
+from library_registry.registrar import LibraryRegistrar
+from library_registry.scripts import (
     AddLibraryScript,
     ConfigureEmailerScript,
     ConfigureIntegrationScript,

@@ -3,10 +3,10 @@ import re
 import requests
 from flask import Response, request
 
-import adobe_xml_templates as t
-from model import ShortClientTokenDecoder
-from util.string_helpers import base64
-from util.xmlparser import XMLParser
+import library_registry.adobe_xml_templates as t
+from library_registry.model import ShortClientTokenDecoder
+from library_registry.util.string_helpers import base64
+from library_registry.util.xmlparser import XMLParser
 
 
 class AdobeVendorIDController:

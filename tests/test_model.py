@@ -9,9 +9,9 @@ import random
 
 import pytest
 
-from config import Configuration
-from emailer import Emailer
-from model import (
+from library_registry.config import Configuration
+from library_registry.emailer import Emailer
+from library_registry.model import (
     create,
     get_one,
     get_one_or_create,
@@ -29,7 +29,7 @@ from model import (
     PlaceAlias,
     Validation,
 )
-from util import (
+from library_registry.util import (
     GeometryUtility
 )
 

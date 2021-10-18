@@ -2,7 +2,7 @@ from io import StringIO
 
 from sqlalchemy import func
 from geoalchemy2 import Geography
-from model import (
+from library_registry.model import (
     get_one,
     get_one_or_create,
     Place,
@@ -13,7 +13,7 @@ from . import (
     DatabaseTest,
 )
 
-from geometry_loader import GeometryLoader
+from library_registry.geometry_loader import GeometryLoader
 
 
 class TestGeometryLoader(DatabaseTest):

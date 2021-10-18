@@ -3,8 +3,8 @@ import pytest
 from . import DatabaseTest
 from email.mime.text import MIMEText
 
-from config import CannotLoadConfiguration, CannotSendEmail
-from emailer import (
+from library_registry.config import CannotLoadConfiguration, CannotSendEmail
+from library_registry.emailer import (
     Emailer,
     EmailTemplate,
 )

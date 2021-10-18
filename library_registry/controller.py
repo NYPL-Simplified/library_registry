@@ -13,10 +13,10 @@ from sqlalchemy.orm import (defer, joinedload)
 from Crypto.PublicKey import RSA
 from Crypto.Cipher import PKCS1_OAEP
 
-from adobe_vendor_id import AdobeVendorIDController
-from authentication_document import AuthenticationDocument
-from emailer import Emailer
-from model import (
+from library_registry.adobe_vendor_id import AdobeVendorIDController
+from library_registry.authentication_document import AuthenticationDocument
+from library_registry.emailer import Emailer
+from library_registry.model import (
     Admin,
     ConfigurationSetting,
     Hyperlink,
@@ -29,15 +29,15 @@ from model import (
     get_one_or_create,
     production_session,
 )
-from config import (Configuration, CannotLoadConfiguration, CannotSendEmail)
-from opds import (Annotator, OPDSCatalog)
-from registrar import LibraryRegistrar
-from templates import admin as admin_template
-from util.app_server import (HeartbeatController, catalog_response)
-from util.http import HTTP
-from util.problem_detail import ProblemDetail
-from util.string_helpers import (base64, random_string)
-from problem_details import (
+from library_registry.config import (Configuration, CannotLoadConfiguration, CannotSendEmail)
+from library_registry.opds import (Annotator, OPDSCatalog)
+from library_registry.registrar import LibraryRegistrar
+from library_registry.templates import admin as admin_template
+from library_registry.util.app_server import (HeartbeatController, catalog_response)
+from library_registry.util.http import HTTP
+from library_registry.util.problem_detail import ProblemDetail
+from library_registry.util.string_helpers import (base64, random_string)
+from library_registry.problem_details import (
     AUTHENTICATION_FAILURE,
     INTEGRATION_ERROR,
     INVALID_CONTACT_URI,

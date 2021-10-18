@@ -4,7 +4,7 @@ import re
 import pytest
 from flask import Flask, request
 
-from util.flask_util import (
+from library_registry.util.flask_util import (
     is_public_ipv4_address,
     originating_ip,
     IPV4_REGEX,

@@ -4,8 +4,8 @@ import ipaddress
 
 from flask import request, Response
 
-from . import problem_detail
-from .language import languages_from_accept
+from library_registry.util import problem_detail
+from library_registry.util.language import languages_from_accept
 
 
 IPV4_REGEX = re.compile(r"""(?<![0-9])                # Preceding character if any may not be numeric

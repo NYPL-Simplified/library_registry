@@ -8,8 +8,8 @@ import re
 import requests
 import sys
 
-from geometry_loader import GeometryLoader
-from model import (
+from library_registry.geometry_loader import GeometryLoader
+from library_registry.model import (
     get_one,
     get_one_or_create,
     production_session,
@@ -20,15 +20,15 @@ from model import (
     ConfigurationSetting,
     ExternalIntegration,
 )
-from config import Configuration
-from adobe_vendor_id import AdobeVendorIDClient
-from authentication_document import AuthenticationDocument
-from emailer import (
+from library_registry.config import Configuration
+from library_registry.adobe_vendor_id import AdobeVendorIDClient
+from library_registry.authentication_document import AuthenticationDocument
+from library_registry.emailer import (
     Emailer,
     EmailTemplate,
 )
-from registrar import LibraryRegistrar
-from util.problem_detail import ProblemDetail
+from library_registry.registrar import LibraryRegistrar
+from library_registry.util.problem_detail import ProblemDetail
 
 class Script(object):
 

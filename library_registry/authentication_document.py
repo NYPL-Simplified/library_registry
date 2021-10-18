@@ -7,7 +7,7 @@ from sqlalchemy.orm.exc import (
     NoResultFound,
 )
 
-from model import (
+from library_registry.model import (
     get_one_or_create,
     Audience,
     CollectionSummary,
@@ -15,7 +15,7 @@ from model import (
     ServiceArea,
 )
 
-from problem_details import INVALID_INTEGRATION_DOCUMENT
+from library_registry.problem_details import INVALID_INTEGRATION_DOCUMENT
 from sqlalchemy.orm.session import Session
 
 

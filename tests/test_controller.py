@@ -16,11 +16,11 @@ from Crypto.Cipher import PKCS1_OAEP
 
 from . import DatabaseTest
 from testing import DummyHTTPClient
-from util import GeometryUtility
-from util.problem_detail import ProblemDetail
+from library_registry.util import GeometryUtility
+from library_registry.util.problem_detail import ProblemDetail
 
-from authentication_document import AuthenticationDocument
-from controller import (
+from library_registry.authentication_document import AuthenticationDocument
+from library_registry.controller import (
     AdobeVendorIDController,
     BaseController,
     CoverageController,
@@ -29,9 +29,9 @@ from controller import (
     LibraryRegistryController,
     ValidationController,
 )
-from emailer import Emailer, EmailTemplate
-from opds import OPDSCatalog
-from model import (
+from library_registry.emailer import Emailer, EmailTemplate
+from library_registry.opds import OPDSCatalog
+from library_registry.model import (
     create,
     get_one,
     get_one_or_create,
@@ -44,8 +44,8 @@ from model import (
     ServiceArea,
     Validation,
 )
-from util.http import RequestTimedOut
-from problem_details import (
+from library_registry.util.http import RequestTimedOut
+from library_registry.problem_details import (
     ERROR_RETRIEVING_DOCUMENT,
     INTEGRATION_DOCUMENT_NOT_FOUND,
     INTEGRATION_ERROR,
@@ -56,7 +56,7 @@ from problem_details import (
     TIMEOUT,
     UNABLE_TO_NOTIFY,
 )
-from config import Configuration
+from library_registry.config import Configuration
 
 
 class MockLibraryRegistry(LibraryRegistry):
@@ -77,7 +77,7 @@ class MockEmailer(Emailer):
 
 class ControllerTest(DatabaseTest):
     def setup(self):
-        from app import app, set_secret_key
+        from library_registry.app import app, set_secret_key
 
         super(ControllerTest, self).setup()
         ConfigurationSetting.sitewide(self._db, Configuration.SECRET_KEY).value = "a secret"
