@@ -4,7 +4,7 @@ import requests
 from flask import Response, request
 
 import library_registry.adobe_xml_templates as t
-from library_registry.model import ShortClientTokenDecoder
+from library_registry.util.short_client_token import ShortClientTokenDecoder
 from library_registry.util.string_helpers import base64
 from library_registry.util.xmlparser import XMLParser
 
