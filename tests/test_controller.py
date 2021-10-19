@@ -79,11 +79,11 @@ class MockEmailer(Emailer):
 
 class ControllerTest(DatabaseTest):
     def setup(self):
-        from library_registry.app import app, set_secret_key
+        from library_registry.app import app
 
         super(ControllerTest, self).setup()
         ConfigurationSetting.sitewide(self._db, Configuration.SECRET_KEY).value = "a secret"
-        set_secret_key(self._db)
+        app.secret_key = ConfigurationSetting.sitewide_secret(self._db, Configuration.SECRET_KEY)
 
         os.environ['AUTOINITIALIZE'] = "False"
         del os.environ['AUTOINITIALIZE']
