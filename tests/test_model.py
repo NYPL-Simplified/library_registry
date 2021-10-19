@@ -12,7 +12,6 @@ import pytest
 from library_registry.config import Configuration
 from library_registry.emailer import Emailer
 from library_registry.model import (
-    Admin,
     Audience,
     CollectionSummary,
     ConfigurationSetting,
@@ -1316,13 +1315,6 @@ class TestCollectionSummary(DatabaseTest):
         with pytest.raises(ValueError) as exc:
             CollectionSummary.set(library, "eng", "-1")
         assert "Collection size cannot be negative." in str(exc.value)
-
-
-class TestAudience(DatabaseTest):
-    def test_unrecognized_audience(self):
-        with pytest.raises(ValueError) as exc:
-            Audience.lookup(self._db, "no such audience")
-        assert "Unknown audience: no such audience" in str(exc.value)
 
 
 class TestDelegatedPatronIdentifier(DatabaseTest):

@@ -9,7 +9,7 @@ import uuid
 import warnings
 from collections import Counter, defaultdict
 
-from flask_babel import lazy_gettext as _
+from flask_babel import lazy_gettext as lgt
 from flask_bcrypt import (
     check_password_hash,
     generate_password_hash
@@ -1575,43 +1575,58 @@ class PlaceAlias(Base):
 
 class Audience(Base):
     """A class of person served by a library."""
-    __tablename__ = 'audiences'
+    ##### Class Constants ####################################################  # noqa: E266
 
-    # The general public
-    PUBLIC = "public"
-
-    # Pre-university students
-    EDUCATIONAL_PRIMARY = "educational-primary"
-
-    # University students
-    EDUCATIONAL_SECONDARY = "educational-secondary"
-
-    # Academics and researchers
-    RESEARCH = "research"
-
-    # People with print disabilities
-    PRINT_DISABILITY = "print-disability"
-
-    # A catch-all for other specialized audiences.
-    OTHER = "other"
+    PUBLIC = "public"                                   # The general public
+    EDUCATIONAL_PRIMARY = "educational-primary"         # Pre-university students
+    EDUCATIONAL_SECONDARY = "educational-secondary"     # University students
+    RESEARCH = "research"                               # Academics and researchers
+    PRINT_DISABILITY = "print-disability"               # People with print disabilities
+    OTHER = "other"                                     # A catch-all for other specialized audiences.
 
     KNOWN_AUDIENCES = [
-        PUBLIC, EDUCATIONAL_PRIMARY, EDUCATIONAL_SECONDARY, RESEARCH,
-        PRINT_DISABILITY, OTHER
+        EDUCATIONAL_PRIMARY,
+        EDUCATIONAL_SECONDARY,
+        OTHER,
+        PRINT_DISABILITY,
+        PUBLIC,
+        RESEARCH,
     ]
+
+    ##### Public Interface / Magic Methods ###################################  # noqa: E266
+
+    ##### SQLAlchemy Table properties ########################################  # noqa: E266
+
+    __tablename__ = 'audiences'
+
+    ##### SQLAlchemy non-Column components ###################################  # noqa: E266
+
+    ##### SQLAlchemy Columns #################################################  # noqa: E266
 
     id = Column(Integer, primary_key=True)
     name = Column(Unicode, index=True, unique=True)
 
-    libraries = relationship("Library", secondary='libraries_audiences',
-                             back_populates="audiences")
+    ##### SQLAlchemy Relationships ###########################################  # noqa: E266
+
+    libraries = relationship("Library", secondary='libraries_audiences', back_populates="audiences")
+
+    ##### SQLAlchemy Field Validation ########################################  # noqa: E266
+
+    ##### Properties and Getters/Setters #####################################  # noqa: E266
+
+    ##### Class Methods ######################################################  # noqa: E266
 
     @classmethod
     def lookup(cls, _db, name):
         if name not in cls.KNOWN_AUDIENCES:
-            raise ValueError(_("Unknown audience: %(name)s", name=name))
-        audience, is_new = get_one_or_create(_db, Audience, name=name)
+            raise ValueError(lgt("Unknown audience: %(name)s", name=name))
+
+        (audience, _) = get_one_or_create(_db, Audience, name=name)
+
         return audience
+
+    ##### Private Class Methods ##############################################  # noqa: E266
+
 
 class CollectionSummary(Base):
     """A summary of a collection held by a library.
@@ -1637,7 +1652,7 @@ class CollectionSummary(Base):
 
         size = int(size)
         if size < 0:
-            raise ValueError(_("Collection size cannot be negative."))
+            raise ValueError(lgt("Collection size cannot be negative."))
 
         # This might return None, which is fine. We'll store it as a
         # collection with an unknown language. This also covers the
