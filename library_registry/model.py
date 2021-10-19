@@ -2339,34 +2339,58 @@ libraries_audiences = Table(
      UniqueConstraint('library_id', 'audience_id'),
  )
 
+
 class Admin(Base):
+    ##### Class Constants ####################################################  # noqa: E266
+
+    ##### Public Interface / Magic Methods ###################################  # noqa: E266
+
+    def check_password(self, raw_password):
+        return check_password_hash(self.password, raw_password)
+
+    def __repr__(self):
+        return f"<Admin: username={self.username}>"
+
+    ##### SQLAlchemy Table properties ########################################  # noqa: E266
+
     __tablename__ = 'admins'
+
+    ##### SQLAlchemy non-Column components ###################################  # noqa: E266
+
+    ##### SQLAlchemy Columns #################################################  # noqa: E266
+
     id = Column(Integer, primary_key=True)
     username = Column(Unicode, index=True, unique=True, nullable=False)
     password = Column(Unicode, index=True)
+
+    ##### SQLAlchemy Relationships ###########################################  # noqa: E266
+
+    ##### SQLAlchemy Field Validation ########################################  # noqa: E266
+
+    ##### Properties and Getters/Setters #####################################  # noqa: E266
+
+    ##### Class Methods ######################################################  # noqa: E266
 
     @classmethod
     def make_password(cls, raw_password):
         return generate_password_hash(raw_password).decode('utf-8')
 
-    def check_password(self, raw_password):
-        return check_password_hash(self.password, raw_password)
-
     @classmethod
     def authenticate(cls, _db, username, password):
-        """Finds an authenticated Admin by username and password
+        """
+        Finds an authenticated Admin by username and password
+
         :return: Admin or None
         """
-        setting_up = _db.query(Admin).count() == 0
-        admin, is_new = get_one_or_create(
-            _db, Admin, username=username
-        )
-        if setting_up:
+        admin = None
+        if _db.query(Admin).count() == 0:   # No admins exist yet, create this one
+            (admin, _) = create(_db, Admin, username=username)
             admin.password = cls.make_password(password)
-            return admin
-        elif not is_new and admin and admin.check_password(password):
-            return admin
-        return None
+        else:
+            admin = get_one(_db, Admin, username=username)
+            if admin and not admin.check_password(password):
+                admin = None
 
-    def __repr__(self):
-        return "<Admin: username=%s>" % self.username
+        return admin
+
+    ##### Private Class Methods ##############################################  # noqa: E266

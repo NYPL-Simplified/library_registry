@@ -1760,32 +1760,3 @@ class TestValidation(DatabaseTest):
         with pytest.raises(Exception) as exc:
             validation.mark_as_successful()
         assert "This validation has expired" in str(exc.value)
-
-
-class TestAdmin(DatabaseTest):
-    def setup(self):
-        super(TestAdmin, self).setup()
-        self.admin = self._admin()
-
-    def test_make_password(self):
-        assert self.admin.password.startswith("$2b$")
-
-    def test_check_password(self):
-        assert self.admin.check_password("123")
-        assert not self.admin.check_password("wrong")
-
-    def test_authenticate(self):
-        # Successfully authenticate existing admin
-        assert Admin.authenticate(self._db, "Admin", "123") == self.admin
-        # Unsuccessfully authenticate existing admin
-        assert Admin.authenticate(self._db, "Admin", "wrong") is None
-
-    def test_make_new_admin(self):
-        # Create the first admin
-        self._db.delete(self.admin)
-        new_admin = Admin.authenticate(self._db, "New", "password")
-        assert new_admin.username == "New"
-        assert new_admin.password.startswith("$2b$")
-        # Now that there's an admin, subsequent attempts to make a new admin won't work.
-        another_admin = Admin.authenticate(self._db, "Another", "password")
-        assert another_admin is None
