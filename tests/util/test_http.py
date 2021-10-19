@@ -13,7 +13,7 @@ from library_registry.util.http import (
 from testing import MockRequestsResponse
 
 
-class TestHTTP(object):
+class TestHTTP:
 
     def test_request_with_timeout_success(self):
 
@@ -51,7 +51,8 @@ class TestHTTP(object):
 
         with pytest.raises(BadResponseException) as exc:
             HTTP._request_with_timeout("http://url/", fake_500_response, "a", "b")
-        assert r"Bad response from http://url/: Got status code 500 from external server, cannot continue." in str(exc.value)
+        err_msg = r"Bad response from http://url/: Got status code 500 from external server, cannot continue."
+        assert err_msg in str(exc.value)
 
     def test_allowed_response_codes(self):
         # Test our ability to raise BadResponseException when
@@ -116,8 +117,13 @@ class TestHTTP(object):
         #
         assert debug_doc.status_code == 502
         assert debug_doc.title == "Bad response"
-        assert debug_doc.detail == 'The server made a request to http://url/, and got an unexpected or invalid response.'
-        assert debug_doc.debug_message == 'Bad response from http://url/: Got status code 200 from external server, cannot continue.\n\nResponse content: Hurray'
+        assert debug_doc.detail == (
+            'The server made a request to http://url/, and got an unexpected or invalid response.'
+        )
+        assert debug_doc.debug_message == (
+            'Bad response from http://url/: Got status code 200 from external server, '
+            'cannot continue.\n\nResponse content: Hurray'
+        )
 
         no_debug_doc = exception.as_problem_detail_document(debug=False)
         assert no_debug_doc.title == "Bad response"
@@ -128,7 +134,7 @@ class TestHTTP(object):
         """Any Unicode that sneaks into the URL, headers or body is
         converted to UTF-8.
         """
-        class ResponseGenerator(object):
+        class ResponseGenerator:
             def __init__(self):
                 self.requests = []
 
@@ -138,9 +144,9 @@ class TestHTTP(object):
 
         generator = ResponseGenerator()
         url = "http://foo"
-        response = HTTP._request_with_timeout(
+        HTTP._request_with_timeout(
             url, generator.response, url, "POST",
-            headers = { "unicode header": "unicode value"},
+            headers={"unicode header": "unicode value"},
             data="unicode data"
         )
         [(args, kwargs)] = generator.requests
@@ -150,12 +156,13 @@ class TestHTTP(object):
 
         # All the Unicode data was converted to bytes before being sent
         # "over the wire".
-        for k,v in list(headers.items()):
+        for k, v in list(headers.items()):
             assert isinstance(k, bytes)
             assert isinstance(v, bytes)
         assert isinstance(data, bytes)
 
-class TestRemoteIntegrationException(object):
+
+class TestRemoteIntegrationException:
 
     def test_with_service_name(self):
         """You don't have to provide a URL when creating a
@@ -173,10 +180,12 @@ class TestRemoteIntegrationException(object):
         other_detail = exc.document_detail(debug=False)
         assert other_detail == debug_detail
 
-        assert debug_detail == 'The server tried to access Unreliable Service but the third-party service experienced an error.'
+        assert debug_detail == (
+            'The server tried to access Unreliable Service but the third-party service experienced an error.'
+        )
 
 
-class TestBadResponseException(object):
+class TestBadResponseException:
 
     def test_helper_constructor(self):
         response = MockRequestsResponse(102, content="nonsense")
@@ -184,29 +193,27 @@ class TestBadResponseException(object):
             "http://url/", "Terrible response, just terrible", response
         )
 
-        # Turn the exception into a problem detail document, and it's full
-        # of useful information.
+        # Turn the exception into a problem detail document, and it's full of useful information.
         doc, status_code, headers = exc.as_problem_detail_document(debug=True).response
         doc = json.loads(doc)
 
         assert doc['title'] == 'Bad response'
         assert doc['detail'] == 'The server made a request to http://url/, and got an unexpected or invalid response.'
-        assert doc['debug_message'] == 'Bad response from http://url/: Terrible response, just terrible\n\nStatus code: 102\nContent: nonsense'
+        assert doc['debug_message'] == (
+            'Bad response from http://url/: Terrible response, just terrible\n\nStatus code: 102\nContent: nonsense'
+        )
 
-        # Unless debug is turned off, in which case none of that
-        # information is present.
+        # Unless debug is turned off, in which case none of that information is present.
         doc, status_code, headers = exc.as_problem_detail_document(debug=False).response
         assert 'debug_message' not in json.loads(doc)
 
     def test_bad_status_code_helper(object):
         response = MockRequestsResponse(500, content="Internal Server Error!")
-        exc = BadResponseException.bad_status_code(
-            "http://url/", response
-        )
+        exc = BadResponseException.bad_status_code("http://url/", response)
         doc, status_code, headers = exc.as_problem_detail_document(debug=True).response
         doc = json.loads(doc)
 
-        assert "Got status code 500 from external server, cannot continue." in  doc['debug_message']
+        assert "Got status code 500 from external server, cannot continue." in doc['debug_message']
 
     def test_as_problem_detail_document(self):
         exception = BadResponseException(
@@ -220,7 +227,7 @@ class TestBadResponseException(object):
         assert document.debug_message == "Bad response from http://url/: What even is this\n\nsome debug info"
 
 
-class TestRequestTimedOut(object):
+class TestRequestTimedOut:
 
     def test_as_problem_detail_document(self):
         exception = RequestTimedOut("http://url/", "I give up")
@@ -239,7 +246,7 @@ class TestRequestTimedOut(object):
         assert status_code == 502
 
 
-class TestRequestNetworkException(object):
+class TestRequestNetworkException:
 
     def test_as_problem_detail_document(self):
         exception = RequestNetworkException("http://url/", "Colossal failure")
