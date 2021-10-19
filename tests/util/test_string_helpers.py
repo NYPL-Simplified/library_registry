@@ -1,18 +1,12 @@
-# encoding: utf-8
-"""Test the helper objects in util.string."""
 import base64 as stdlib_base64
 import re
 
 import pytest
 
-from library_registry.util.string_helpers import (
-    UnicodeAwareBase64,
-    base64,
-    random_string
-)
+from library_registry.util.string_helpers import (UnicodeAwareBase64, base64, random_string)
 
 
-class TestUnicodeAwareBase64(object):
+class TestUnicodeAwareBase64:
 
     def test_encoding(self):
         test_string = u"םולש"
@@ -78,27 +72,30 @@ class TestUnicodeAwareBase64(object):
         assert stdlib_base64.b64encode(snowman_utf8) == b"4piD"
 
 
-class TestRandomstring(object):
+def test_random_string():
+    """
+    GIVEN: An integer representing the length of a desired random string
+    WHEN:  The random_string() method is called with that size
+    THEN:  A string of random hex digits of an appropriate length should be returned
+    """
+    assert random_string(0) == ""
 
-    def test_random_string(self):
-        assert random_string(0) == ""
+    # The strings are random.
+    res1 = random_string(8)
+    res2 = random_string(8)
+    assert res1 != res2
 
-        # The strings are random.
-        res1 = random_string(8)
-        res2 = random_string(8)
-        assert res1 != res2
+    # We can't test exact values, because the randomness comes
+    # from /dev/urandom, but we can test some of their properties:
+    for size in range(1, 16):
+        x = random_string(size)
 
-        # We can't test exact values, because the randomness comes
-        # from /dev/urandom, but we can test some of their properties:
-        for size in range(1, 16):
-            x = random_string(size)
+        # The strings are Unicode strings, not bytestrings
+        assert isinstance(x, str)
 
-            # The strings are Unicode strings, not bytestrings
-            assert isinstance(x, str)
+        # The strings are entirely composed of lowercase hex digits.
+        assert re.compile("[^a-f0-9]").search(x) is None
 
-            # The strings are entirely composed of lowercase hex digits.
-            assert re.compile("[^a-f0-9]").search(x) is None
-
-            # Each byte is represented as two digits, so the length of the
-            # string is twice the length passed in to the function.
-            assert len(x) == size*2
+        # Each byte is represented as two digits, so the length of the
+        # string is twice the length passed in to the function.
+        assert len(x) == size*2
