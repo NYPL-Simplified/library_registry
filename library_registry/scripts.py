@@ -7,27 +7,24 @@ import sys
 
 from library_registry.geometry_loader import GeometryLoader
 from library_registry.model import (
-    production_session,
-    Place,
-    Library,
-    LibraryAlias,
-    ServiceArea,
     ConfigurationSetting,
     ExternalIntegration,
+    Library,
+    LibraryAlias,
+    Place,
+    ServiceArea,
+    production_session,
 )
 from library_registry.model_helpers import (get_one, get_one_or_create)
 from library_registry.config import Configuration
 from library_registry.adobe_vendor_id import AdobeVendorIDClient
 from library_registry.authentication_document import AuthenticationDocument
-from library_registry.emailer import (
-    Emailer,
-    EmailTemplate,
-)
+from library_registry.emailer import (Emailer, EmailTemplate)
 from library_registry.registrar import LibraryRegistrar
 from library_registry.util.problem_detail import ProblemDetail
 
 
-class Script(object):
+class Script:
 
     @property
     def _db(self):
@@ -268,11 +265,17 @@ class SetCoverageAreaScript(LibraryScript):
         parser = super(SetCoverageAreaScript, cls).arg_parser()
         parser.add_argument(
             '--service-area',
-            help="JSON document or string describing the library's service area. If no value is specified, it is assumed to be the same as --focus-area."
+            help=(
+                "JSON document or string describing the library's service area. "
+                "If no value is specified, it is assumed to be the same as --focus-area."
+            )
         )
         parser.add_argument(
             '--focus-area',
-            help="JSON document or string describing the library's focus area. If no value is specified, it is assumed to be the same as --service-area."
+            help=(
+                "JSON document or string describing the library's focus area. "
+                "If no value is specified, it is assumed to be the same as --service-area."
+            )
         )
         return parser
 
@@ -292,19 +295,21 @@ class SetCoverageAreaScript(LibraryScript):
         # string will be interpreted as a single place name.
         try:
             service_area = json.loads(service_area)
-        except (ValueError, TypeError) as e:
+        except (ValueError, TypeError):
             pass
         try:
             focus_area = json.loads(focus_area)
-        except (ValueError, TypeError) as e:
+        except (ValueError, TypeError):
             pass
 
         service_area, focus_area = AuthenticationDocument.parse_service_and_focus_area(
             self._db, service_area, focus_area, place_class
         )
-        for (valid, unknown, ambiguous) in [service_area, focus_area]:
+
+        for (_, unknown, ambiguous) in [service_area, focus_area]:
             if unknown:
                 raise ValueError("Unknown places: %r" % list(unknown.items()))
+
             if ambiguous:
                 raise ValueError("Ambiguous places: %r" % list(unknown.items()))
 
@@ -333,15 +338,13 @@ class RegistrationRefreshScript(LibraryScript):
         for library in self.libraries(parsed.library):
             result = registrar.reregister(library)
             if isinstance(result, ProblemDetail):
-               self.log.error(
+                self.log.error(
                     "FAILURE %s (%s) uri=%s, title=%s, detail=%s, debug=%s",
                     library.name, library.authentication_url,
                     result.uri, result.title, result.detail, result.debug_message
                 )
             else:
-                self.log.info(
-                    "SUCCESS %s (%s)", library.name, library.authentication_url
-                )
+                self.log.info("SUCCESS %s (%s)", library.name, library.authentication_url)
                 self._db.commit()
 
     @property
@@ -379,7 +382,7 @@ class AdobeVendorIDAcceptanceTestScript(Script):
         client = AdobeVendorIDClient(base_url)
 
         print("1. Checking status: %s" % client.status_url)
-        response = client.status()
+        response = client.status()                      # noqa: F841
         # status() will raise an exception if anything is wrong.
         print('OK Service is up and running.')
 
@@ -405,12 +408,13 @@ class AdobeVendorIDAcceptanceTestScript(Script):
         print("OK Found user info: %s" % user_info)
         print("   Full content: %s" % content)
 
+
 class ConfigurationSettingScript(Script):
 
     @classmethod
     def _parse_setting(self, setting):
         """Parse a command-line setting option into a key-value pair."""
-        if not '=' in setting:
+        if '=' not in setting:
             raise ValueError(
                 'Incorrect format for setting: "%s". Should be "key=value"'
                 % setting
@@ -463,19 +467,22 @@ class ConfigureSiteScript(ConfigurationSettingScript):
                 key, value = self._parse_setting(setting)
                 ConfigurationSetting.sitewide(_db, key).value = value
         settings = _db.query(ConfigurationSetting).filter(
-            ConfigurationSetting.library_id==None).filter(
-                ConfigurationSetting.external_integration==None
-            ).order_by(ConfigurationSetting.key)
+            ConfigurationSetting.library_id==None               # noqa: E711,E225
+        ).filter(
+            ConfigurationSetting.external_integration==None     # noqa: E711,E225
+        ).order_by(ConfigurationSetting.key)
         output.write("Current site-wide settings:\n")
         for setting in settings:
             if args.show_secrets or not setting.is_secret:
                 output.write("%s='%s'\n" % (setting.key, setting.value))
         _db.commit()
 
+
 class ShowIntegrationsScript(Script):
     """Show information about the external integrations on a server."""
 
     name = "List the external integrations on this server."
+
     @classmethod
     def arg_parser(cls):
         parser = argparse.ArgumentParser()
@@ -518,6 +525,7 @@ class ShowIntegrationsScript(Script):
             )
             output.write("\n")
 
+
 class ConfigureIntegrationScript(ConfigurationSettingScript):
     """Create a integration or change its settings."""
     name = "Create a site-wide integration or change an integration's settings"
@@ -559,9 +567,7 @@ class ConfigureIntegrationScript(ConfigurationSettingScript):
             )
         integration = None
         if id:
-            integration = get_one(
-                _db, ExternalIntegration, ExternalIntegration.id==id
-            )
+            integration = get_one(_db, ExternalIntegration, ExternalIntegration.id==id)     # noqa: E225
             if not integration:
                 raise ValueError("No integration with ID %s." % id)
         if name:
@@ -624,9 +630,8 @@ class ConfigureVendorIDScript(Script):
         )
         c = Configuration
 
-        # All node values are string representations of hexidecimal
-        # numbers.
-        hex_node = int(parsed.node_value, 16)
+        # All node values are string representations of hexidecimal numbers.
+        hex_node = int(parsed.node_value, 16)   # noqa: F841
 
         integration.setting(c.ADOBE_VENDOR_ID).value = parsed.vendor_id
         integration.setting(c.ADOBE_VENDOR_ID_NODE_VALUE).value = parsed.node_value
