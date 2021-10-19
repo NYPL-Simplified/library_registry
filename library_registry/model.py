@@ -1629,43 +1629,65 @@ class Audience(Base):
 
 
 class CollectionSummary(Base):
-    """A summary of a collection held by a library.
-
-    We only need to know the language of the collection and
-    approximately how big it is.
     """
+    A summary of a collection held by a library.
+
+    We only need to know the language of the collection and approximately how big it is.
+    """
+    ##### Class Constants ####################################################  # noqa: E266
+
+    ##### Public Interface / Magic Methods ###################################  # noqa: E266
+
+    ##### SQLAlchemy Table properties ########################################  # noqa: E266
+
     __tablename__ = 'collectionsummaries'
 
+    ##### SQLAlchemy non-Column components ###################################  # noqa: E266
+
+    ##### SQLAlchemy Columns #################################################  # noqa: E266
+
     id = Column(Integer, primary_key=True)
-    library_id = Column(Integer, ForeignKey('libraries.id'), index=True)
     language = Column(Unicode)
     size = Column(Integer)
 
+    ##### SQLAlchemy Relationships ###########################################  # noqa: E266
+
+    library_id = Column(Integer, ForeignKey('libraries.id'), index=True)
+
+    ##### SQLAlchemy Field Validation ########################################  # noqa: E266
+
+    ##### Properties and Getters/Setters #####################################  # noqa: E266
+
+    ##### Class Methods ######################################################  # noqa: E266
+
     @classmethod
     def set(cls, library, language, size):
-        """Create or update a CollectionSummary for the given
-        library and language.
+        """
+        Create or update a CollectionSummary for the given library and language.
 
         :return: An up-to-date CollectionSummary.
         """
         _db = Session.object_session(library)
 
-        size = int(size)
+        try:
+            size = int(float(size))
+        except (ValueError, TypeError):
+            raise ValueError(lgt("Collection size must be numeric"))
+
         if size < 0:
             raise ValueError(lgt("Collection size cannot be negative."))
 
-        # This might return None, which is fine. We'll store it as a
-        # collection with an unknown language. This also covers the
-        # case where the library specifies its collection size but
-        # doesn't mention any languages.
+        # This might return None, which is fine. We'll store it as a collection with an unknown language.
+        # This also covers the case where the library specifies its collection size but doesn't mention any languages.
         language_code = LanguageCodes.string_to_alpha_3(language)
 
-        summary, is_new = get_one_or_create(
-            _db, CollectionSummary, library=library,
-            language=language_code
-        )
+        (summary, _) = get_one_or_create(_db, CollectionSummary, library=library, language=language_code)
         summary.size = size
+
         return summary
+
+    ##### Private Class Methods ##############################################  # noqa: E266
+
 
 Index("ix_collectionsummary_language_size", CollectionSummary.language, CollectionSummary.size)
 
