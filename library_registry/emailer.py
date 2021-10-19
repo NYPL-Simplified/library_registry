@@ -1,8 +1,8 @@
-import smtplib
-from email import charset
 from email.header import Header
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from email import charset
+import smtplib
 
 from library_registry.config import CannotLoadConfiguration, CannotSendEmail
 
@@ -97,9 +97,8 @@ class Emailer:
         self.templates = templates
 
         # Make sure the templates don't contain any template values we can't handle.
-        test_template_values = dict(
-            (key, "value") for key in self.KNOWN_TEMPLATE_KEYS
-        )
+        test_template_values = dict((key, "value") for key in self.KNOWN_TEMPLATE_KEYS)
+
         for template in list(self.templates.values()):
             try:
                 template.body("from address", "to address", **test_template_values)
@@ -108,17 +107,17 @@ class Emailer:
                 raise CannotLoadConfiguration(m)
 
     def send(self, email_type, to_address, smtp=None, **kwargs):
-        """Generate an email from a template and send it.
+        """
+        Generate an email from a template and send it.
 
         :param email_type: The name of the template to use.
         :param to_address: Addressee of the email.
-        :param smtp: Use this object as a mock instead of creating an
-            smtplib.SMTP object.
-        :param kwargs: Arguments to use when generating the email from
-            a template.
+        :param smtp: Use this object as a mock instead of creating an smtplib.SMTP object.
+        :param kwargs: Arguments to use when generating the email from a template.
         """
         if email_type not in self.templates:
             raise ValueError("No such email template: %s" % email_type)
+
         template = self.templates[email_type]
         from_header = '%s <%s>' % (self.from_name, self.from_address)
         kwargs['from_address'] = self.from_address
@@ -145,7 +144,8 @@ class Emailer:
     ##### Class Methods ######################################################  # noqa: E266
     @classmethod
     def from_sitewide_integration(cls, _db):
-        """Create an Emailer from a site-wide email integration.
+        """
+        Create an Emailer from a site-wide email integration.
 
         :param _db: A database connection
         """
@@ -168,35 +168,27 @@ class Emailer:
             template = EmailTemplate(subject, body)
             email_templates[email_type] = template
 
-        return cls(smtp_username=integration.username,
-                   smtp_password=integration.password,
+        return cls(smtp_username=integration.username, smtp_password=integration.password,
                    smtp_host=host, smtp_port=port, from_name=from_name,
-                   from_address=from_address,
-                   templates=email_templates)
+                   from_address=from_address, templates=email_templates)
 
     ##### Private Class Methods ##############################################  # noqa: E266
     @classmethod
     def _sitewide_integration(cls, _db):
         """Find the ExternalIntegration for the emailer."""
         from library_registry.model import ExternalIntegration
-        qu = _db.query(ExternalIntegration).filter(
-            ExternalIntegration.goal == cls.GOAL
-        )
+        qu = _db.query(ExternalIntegration).filter(ExternalIntegration.goal == cls.GOAL)
         integrations = qu.all()
+
         if not integrations:
-            raise CannotLoadConfiguration(
-                "No email integration is configured."
-            )
-            return None
+            raise CannotLoadConfiguration("No email integration is configured.")
 
         if len(integrations) > 1:
-            # If there are multiple integrations configured, none of
-            # them can be the 'site-wide' configuration.
-            raise CannotLoadConfiguration(
-                'Multiple email integrations are configured'
-            )
+            # If there are multiple integrations configured, none of them can be the 'site-wide' configuration.
+            raise CannotLoadConfiguration('Multiple email integrations are configured')
 
         [integration] = integrations
+
         return integration
 
 
@@ -223,10 +215,8 @@ class EmailTemplate:
         message['To'] = to_header
         message['Subject'] = Header(self.subject_template % kwargs, 'utf-8')
 
-        # This might look ugly, because %(from_address)s in a template
-        # is expected to be an unadorned email address, whereas this
-        # might look like '"Name" <email>', but it's better than
-        # nothing.
+        # This might look ugly, because %(from_address)s in a template is expected to be an unadorned
+        # email address, whereas this might look like '"Name" <email>', but it's better than nothing.
         for k, v in (('to_address', to_header), ('from_address', from_header)):
             if k not in kwargs:
                 kwargs[k] = v
