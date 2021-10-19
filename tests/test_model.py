@@ -1284,53 +1284,6 @@ class TestLibrary(DatabaseTest):
         assert result == library
 
 
-class TestExternalIntegration(DatabaseTest):
-
-    def setup(self):
-        super(TestExternalIntegration, self).setup()
-        self.external_integration, ignore = create(
-            self._db, ExternalIntegration, goal=self._str, protocol=self._str
-        )
-
-    def test_set_key_value_pair(self):
-        """Test the ability to associate extra key-value pairs with
-        an ExternalIntegration.
-        """
-        assert self.external_integration.settings == []
-
-        setting = self.external_integration.set_setting("website_id", "id1")
-        assert setting.key == "website_id"
-        assert setting.value == "id1"
-
-        # Calling set() again updates the key-value pair.
-        assert self.external_integration.settings == [setting]
-        setting2 = self.external_integration.set_setting("website_id", "id2")
-        assert setting2 == setting
-        assert setting2.value == "id2"
-
-        assert self.external_integration.setting("website_id") == setting2
-
-    def test_explain(self):
-        integration, ignore = create(
-            self._db, ExternalIntegration,
-            protocol="protocol", goal="goal"
-        )
-        integration.name = "The Integration"
-        integration.setting("somesetting").value = "somevalue"
-        integration.setting("password").value = "somepass"
-
-        expect = """ID: %s
-Name: The Integration
-Protocol/Goal: protocol/goal
-somesetting='somevalue'""" % integration.id
-        actual = integration.explain()
-        assert expect == "\n".join(actual)
-
-        # If we pass in True for include_secrets, we see the passwords.
-        with_secrets = integration.explain(include_secrets=True)
-        assert "password='somepass'" in with_secrets
-
-
 class TestHyperlink(DatabaseTest):
 
     def test_notify(self):

@@ -1993,10 +1993,10 @@ class DelegatedPatronIdentifier(Base):
 
 
 class ExternalIntegration(Base):
-
-    """An external integration contains configuration for connecting
-    to a third-party API.
     """
+    An external integration contains configuration for connecting to a third-party API.
+    """
+    ##### Class Constants ####################################################  # noqa: E266
 
     # Possible goals of ExternalIntegrations.
 
@@ -2007,8 +2007,7 @@ class ExternalIntegration(Base):
     # Integrations with DRM_GOAL
     ADOBE_VENDOR_ID = 'Adobe Vendor ID'
 
-    # These integrations are associated with external services that
-    # collect logs of server-side events.
+    # These integrations are associated with external services that collect logs of server-side events.
     LOGGING_GOAL = 'logging'
 
     # Integrations with LOGGING_GOAL
@@ -2021,56 +2020,104 @@ class ExternalIntegration(Base):
     # Integrations with EMAIL_GOAL
     SMTP = 'SMTP'
 
-    # If there is a special URL to use for access to this API,
-    # put it here.
+    # If there is a special URL to use for access to this API, put it here.
     URL = "url"
 
-    # If access requires authentication, these settings represent the
-    # username/password or key/secret combination necessary to
-    # authenticate. If there's a secret but no key, it's stored in
-    # 'password'.
+    # If access requires authentication, these settings represent the username/password or key/secret
+    # combination necessary to authenticate. If there's a secret but no key, it's stored in 'password'.
     USERNAME = "username"
     PASSWORD = "password"
 
+    ##### Public Interface / Magic Methods ###################################  # noqa: E266
+
+    def __repr__(self):
+        return (
+            "<ExternalIntegration: "
+            f"protocol={self.protocol} "
+            f"goal='{self.goal}' "
+            f"settings={len(self.settings)} "
+            f"ID={self.id}>"
+        )
+
+    def set_setting(self, key, value):
+        """Create or update a key-value setting for this ExternalIntegration."""
+        setting = self.setting(key)
+        setting.value = value
+        return setting
+
+    def setting(self, key):
+        """
+        Find or create a ConfigurationSetting on this ExternalIntegration.
+
+        :param key: Name of the setting.
+        :return: A ConfigurationSetting
+        """
+        return ConfigurationSetting.for_externalintegration(key, self)
+
+    def explain(self, include_secrets=False):
+        """
+        Create a series of human-readable strings to explain an ExternalIntegration's settings.
+
+        :param include_secrets: For security reasons, settings such as passwords are not displayed by default.
+
+        :return: A list of explanatory strings.
+        """
+        lines = []
+        lines.append("ID: %s" % self.id)
+
+        if self.name:
+            lines.append("Name: %s" % self.name)
+
+        lines.append("Protocol/Goal: %s/%s" % (self.protocol, self.goal))
+
+        def key(setting):
+            if setting.library:
+                return setting.key, setting.library.name
+            return (setting.key, None)
+
+        for setting in sorted(self.settings, key=key):
+            explanation = "%s='%s'" % (setting.key, setting.value)
+
+            if setting.library:
+                explanation = "%s (applies only to %s)" % (explanation, setting.library.name)
+
+            if include_secrets or not setting.is_secret:
+                lines.append(explanation)
+
+        return lines
+
+    ##### SQLAlchemy Table properties ########################################  # noqa: E266
+
     __tablename__ = 'externalintegrations'
+
+    ##### SQLAlchemy non-Column components ###################################  # noqa: E266
+
+    ##### SQLAlchemy Columns #################################################  # noqa: E266
+
     id = Column(Integer, primary_key=True)
 
-    # Each integration should have a protocol (explaining what type of
-    # code or network traffic we need to run to get things done) and a
-    # goal (explaining the real-world goal of the integration).
+    # Each integration should have a protocol (explaining what type of code or network traffic we need to
+    # run to get things done) and a goal (explaining the real-world goal of the integration).
     #
     # Basically, the protocol is the 'how' and the goal is the 'why'.
     protocol = Column(Unicode, nullable=False)
     goal = Column(Unicode, nullable=True)
 
-    # A unique name for this ExternalIntegration. This is primarily
-    # used to identify ExternalIntegrations from command-line scripts.
+    # A unique name for this ExternalIntegration. This is primarily used to identify ExternalIntegrations
+    # from command-line scripts.
     name = Column(Unicode, nullable=True, unique=True)
 
-    # Any additional configuration information goes into
-    # ConfigurationSettings.
+    ##### SQLAlchemy Relationships ###########################################  # noqa: E266
+
+    # Any additional configuration information goes into ConfigurationSettings.
     settings = relationship(
         "ConfigurationSetting", backref="external_integration",
         lazy="joined", cascade="save-update, merge, delete, delete-orphan",
     )
 
-    def __repr__(self):
-        return "<ExternalIntegration: protocol=%s goal='%s' settings=%d ID=%d>" % (
-            self.protocol, self.goal, len(self.settings), self.id)
+    ##### SQLAlchemy Field Validation ########################################  # noqa: E266
 
-    @classmethod
-    def lookup(cls, _db, protocol, goal):
-        integrations = _db.query(cls).filter(
-            cls.protocol==protocol, cls.goal==goal
-        )
-
-        integrations = integrations.all()
-        if len(integrations) > 1:
-            logging.warn("Multiple integrations found for '%s'/'%s'" % (protocol, goal))
-
-        if not integrations:
-            return None
-        return integrations[0]
+    ##### Properties and Getters/Setters #####################################  # noqa: E266
 
     @hybrid_property
     def url(self):
@@ -2096,50 +2143,23 @@ class ExternalIntegration(Base):
     def password(self, new_password):
         return self.set_setting(self.PASSWORD, new_password)
 
-    def set_setting(self, key, value):
-        """Create or update a key-value setting for this ExternalIntegration."""
-        setting = self.setting(key)
-        setting.value = value
-        return setting
+    ##### Class Methods ######################################################  # noqa: E266
 
-    def setting(self, key):
-        """Find or create a ConfigurationSetting on this ExternalIntegration.
+    @classmethod
+    def lookup(cls, _db, protocol, goal):
+        integrations = _db.query(cls).filter(cls.protocol == protocol, cls.goal == goal)
 
-        :param key: Name of the setting.
-        :return: A ConfigurationSetting
-        """
-        return ConfigurationSetting.for_externalintegration(
-            key, self
-        )
+        integrations = integrations.all()
 
-    def explain(self, include_secrets=False):
-        """Create a series of human-readable strings to explain an
-        ExternalIntegration's settings.
+        if len(integrations) > 1:
+            logging.warning("Multiple integrations found for '%s'/'%s'" % (protocol, goal))
 
-        :param include_secrets: For security reasons,
-           sensitive settings such as passwords are not displayed by default.
+        if not integrations:
+            return None
 
-        :return: A list of explanatory strings.
-        """
-        lines = []
-        lines.append("ID: %s" % self.id)
-        if self.name:
-            lines.append("Name: %s" % self.name)
-        lines.append("Protocol/Goal: %s/%s" % (self.protocol, self.goal))
+        return integrations[0]
 
-        def key(setting):
-            if setting.library:
-                return setting.key, setting.library.name
-            return (setting.key, None)
-        for setting in sorted(self.settings, key=key):
-            explanation = "%s='%s'" % (setting.key, setting.value)
-            if setting.library:
-                explanation = "%s (applies only to %s)" % (
-                    explanation, setting.library.name
-                )
-            if include_secrets or not setting.is_secret:
-                lines.append(explanation)
-        return lines
+    ##### Private Class Methods ##############################################  # noqa: E266
 
 
 class ConfigurationSetting(Base):
