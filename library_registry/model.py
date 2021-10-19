@@ -1079,47 +1079,89 @@ class LibraryAlias(Base):
 
 
 class ServiceArea(Base):
-    """Designates a geographic area served by a Library.
-
-    A ServiceArea maps a Library to a Place. People living in this
-    Place have service from the Library.
     """
-    __tablename__ = 'serviceareas'
+    Designates a geographic area served by a Library.
 
-    id = Column(Integer, primary_key=True)
-    library_id = Column(
-        Integer, ForeignKey('libraries.id'), index=True
-    )
+    A ServiceArea maps a Library to a Place. People living in this Place have service from the Library.
+    """
+    ##### Class Constants ####################################################  # noqa: E266
 
-    place_id = Column(
-        Integer, ForeignKey('places.id'), index=True
-    )
-
-    # A library may have a ServiceArea because people in that area are
-    # eligible for service, or because the library specifically
-    # focuses on that area.
+    # A library may have a ServiceArea because people in that area are eligible for service, or because
+    # the library specifically focuses on that area.
     ELIGIBILITY = 'eligibility'
     FOCUS = 'focus'
-    servicearea_type_enum = Enum(
-        ELIGIBILITY, FOCUS, name='servicearea_type'
-    )
-    type = Column(servicearea_type_enum,
-                  index=True, nullable=False, default=ELIGIBILITY)
 
+    ##### Public Interface / Magic Methods ###################################  # noqa: E266
+
+    ##### SQLAlchemy Table properties ########################################  # noqa: E266
+
+    __tablename__ = 'serviceareas'
     __table_args__ = (
         UniqueConstraint('library_id', 'place_id', 'type'),
     )
 
+    ##### SQLAlchemy non-Column components ###################################  # noqa: E266
+
+    servicearea_type_enum = Enum(ELIGIBILITY, FOCUS, name='servicearea_type')
+
+    ##### SQLAlchemy Columns #################################################  # noqa: E266
+
+    id = Column(Integer, primary_key=True)
+    type = Column(servicearea_type_enum, index=True, nullable=False, default=ELIGIBILITY)
+
+    ##### SQLAlchemy Relationships ###########################################  # noqa: E266
+
+    library_id = Column(Integer, ForeignKey('libraries.id'), index=True)
+    place_id = Column(Integer, ForeignKey('places.id'), index=True)
+
+    ##### SQLAlchemy Field Validation ########################################  # noqa: E266
+
+    ##### Properties and Getters/Setters #####################################  # noqa: E266
+
+    ##### Class Methods ######################################################  # noqa: E266
+
+    ##### Private Class Methods ##############################################  # noqa: E266
+
 
 class Place(Base):
-    __tablename__ = 'places'
+    """
+    A location on the earth, with a defined geometry.
 
-    # These are the kinds of places we keep track of. These are not
-    # supposed to be precise terms. Each census-designated place is
-    # called a 'city', even if it's not a city in the legal sense.
-    # Countries that call their top-level administrative divisions something
-    # other than 'states' can still use 'state' as their type. (But see
-    # LibraryType.ADMINISTRATIVE_DIVISION_TYPES.)
+    Notes:
+        * Regarding the place type constants, (NATION, CITY, etc.):
+            * These are the kinds of places we keep track of. These are not supposed to be precise terms.
+            * Each census-designated place is called a 'city', even if it's not a city in the legal sense.
+            * Countries that call their top-level administrative divisions something other than 'states'
+              can still use 'state' as their type.
+
+    Place attributes/columns:
+
+        id                  - Integer primary key
+
+        type                - The Place type, typically drawn from class constants (NATION, CITY, etc.)
+
+        external_id         - Unique ID given to this Place in the data source it was derived from
+
+        external_name       - Name given to this Place by the data source it was derived from
+
+        abbreviated_name    - Canonical abbreviation for this Place. Generally used only for nations and states.
+
+        geometry            - The geography of the Place itself. Stored internally as a Geometry, which means we
+                              have to cast to Geography when doing calculations that involve great circle distance.
+
+    Place model relationships:
+
+        Place
+            parent          - The most convenient place that 'contains' this place. For most places the most
+                              convenient parent will be a state. For states, the best parent will be a nation.
+                              A nation has no parent; neither does 'everywhere'.
+            children        - The Places which use this Place as parent.
+
+        PlaceAlias
+
+        ServiceArea
+    """
+    ##### Class Constants ####################################################  # noqa: E266
     NATION                  = PLACE_NATION                  # noqa: E221
     STATE                   = PLACE_STATE                   # noqa: E221
     COUNTY                  = PLACE_COUNTY                  # noqa: E221
@@ -1128,195 +1170,194 @@ class Place(Base):
     LIBRARY_SERVICE_AREA    = PLACE_LIBRARY_SERVICE_AREA    # noqa: E221
     EVERYWHERE              = PLACE_EVERYWHERE              # noqa: E221
 
-    id = Column(Integer, primary_key=True)
+    ##### Public Interface / Magic Methods ###################################  # noqa: E266
+    def __repr__(self):
+        parent = self.parent.external_name if self.parent else None
+        abbr = f"abbr={self.abbreviated_name} " if self.abbreviated_name else ''
+        return f"<Place: {self.external_name} type={self.type} {abbr}external_id={self.external_id} parent={parent}>"
 
-    # The type of place.
-    type = Column(Unicode(255), index=True, nullable=False)
+    def as_centroid_point(self):
+        if not self.geometry:
+            return None
 
-    # The unique ID given to this place in the data source it was
-    # derived from.
-    external_id = Column(Unicode, index=True)
+        db_session = Session.object_session(self)
+        centroid = func.ST_AsEWKT(func.ST_Centroid(Place.geometry))
+        stmt = select([centroid]).where(Place.id == self.id)
+        return db_session.execute(stmt).scalar()
 
-    # The name given to this place by the data source it was
-    # derived from.
-    external_name = Column(Unicode, index=True)
-
-    # A canonical abbreviated name for this place. Generally used only
-    # for nations and states.
-    abbreviated_name = Column(Unicode, index=True)
-
-    # The most convenient place that 'contains' this place. For most
-    # places the most convenient parent will be a state. For states,
-    # the best parent will be a nation. A nation has no parent; neither
-    # does 'everywhere'.
-    parent_id = Column(
-        Integer, ForeignKey('places.id'), index=True
-    )
-
-    children = relationship(
-        "Place",
-        backref=backref("parent", remote_side = [id]),
-        lazy="joined"
-    )
-
-    # The geography of the place itself. It is stored internally as a
-    # geometry, which means we have to cast to Geography when doing
-    # calculations.
-    geometry = Column(Geometry(srid=4326), nullable=True)
-
-    aliases = relationship("PlaceAlias", backref='place')
-
-    service_areas = relationship("ServiceArea", backref="place")
-
-    @classmethod
-    def everywhere(cls, _db):
-        """Return a special Place that represents everywhere.
-
-        This place has no .geometry, so attempts to use it in
-        geographic comparisons will fail.
+    def overlaps_not_counting_border(self, qu):
         """
-        place, is_new = get_one_or_create(
-            _db, Place, type=cls.EVERYWHERE,
-            create_method_kwargs=dict(external_id="Everywhere",
-                                      external_name="Everywhere")
-        )
-        return place
+        Modifies a filter to find places that have points inside this Place, not counting the border.
 
-    @classmethod
-    def default_nation(cls, _db):
-        """Return the default nation for this library registry.
-
-        If an incoming coverage area doesn't mention a nation, we'll
-        assume it's within this nation.
-
-        :return: The default nation, if one can be found. Otherwise, None.
+        Connecticut has no points inside New York, but the two states share a border. This method
+        creates a more real-world notion of 'inside' that does not count a shared border.
         """
-        default_nation = None
-        abbreviation=ConfigurationSetting.sitewide(
-            _db, Configuration.DEFAULT_NATION_ABBREVIATION
-        ).value
-        if abbreviation:
-            default_nation = get_one(
-                _db, Place, type=Place.NATION, abbreviated_name=abbreviation
-            )
-            if not default_nation:
-                logging.error(
-                    "Could not look up default nation %s", abbreviation
-                )
-        return default_nation
+        intersects = Place.geometry.intersects(self.geometry)
+        touches = func.ST_Touches(Place.geometry, self.geometry)
+        return qu.filter(intersects).filter(touches == False)       # noqa: E712
 
-    @classmethod
-    def larger_place_types(cls, type):
-        """Return a list of place types known to be bigger than `type`.
-
-        Places don't form a strict heirarchy. In particular, ZIP codes
-        are not 'smaller' than cities. But counties and cities are
-        smaller than states, and states are smaller than nations, so
-        if you're searching inside a state for a place called "Japan",
-        you know that the nation of Japan is not what you're looking
-        for.
+    def lookup_inside(self, name, using_overlap=False, using_external_source=True):
         """
-        larger = [Place.EVERYWHERE]
-        if type not in (Place.NATION, Place.EVERYWHERE):
-            larger.append(Place.NATION)
-        if type in (Place.COUNTY, Place.CITY, Place.POSTAL_CODE):
-            larger.append(Place.STATE)
-        if type == Place.CITY:
-            larger.append(Place.COUNTY)
-        return larger
+        Look up a named Place that is geographically 'inside' this Place.
 
-    @classmethod
-    def parse_name(cls, place_name):
-        """Try to extract a place type from a name.
+        :param name: The name of a place, such as "Boston" or "Calabasas, CA", or "Cook County".
 
-        :return: A 2-tuple (place_name, place_type)
+        :param using_overlap: If this is true, then place A is 'inside' place B if their shapes overlap,
+            not counting borders. For example, Montgomery is 'inside' Montgomery County, Alabama, and
+            the United States. However, Alabama is not 'inside' Georgia (even though they share a border).
 
-        e.g. "Kern County" becomes ("Kern", Place.COUNTY)
-        "Arizona State" becomes ("Arizona", Place.STATE)
-        "Chicago" becaomes ("Chicago", None)
+            If `using_overlap` is false, then place A is 'inside' place B only if B is the .parent of A.
+            In this case, Alabama is considered to be 'inside' the United States, but Montgomery is not
+            -- the only place it's 'inside' is Alabama. Checking this way is much faster, so it's the default.
+
+        :param using_external_source: If this is True, then if no named place can be found in the database,
+            the uszipcodes library will be used in an attempt to find some equivalent postal codes.
+
+        :return: A Place object, or None if no match could be found.
+
+        :raise MultipleResultsFound: If more than one Place with the given name is 'inside' this Place.
         """
-        check = place_name.lower()
-        place_type = None
-        if check.endswith(' county'):
-            place_name = place_name[:-7]
-            place_type = Place.COUNTY
+        parts = Place.name_parts(name)
+        if len(parts) > 1:
+            # We're trying to look up a scoped name such as "Boston, MA". `name_parts` has turned
+            # "Boston, MA" into ["MA", "Boston"].
+            #
+            # Now we need to look for "MA" inside ourselves, and then look for "Boston" inside the object we get back.
+            look_in_here = self
+            for part in parts:
+                look_in_here = look_in_here.lookup_inside(part, using_overlap)
+                if not look_in_here:
+                    # A link in the chain has failed. Return None
+                    # immediately.
+                    return None
+            # Every link in the chain has succeeded, and `must_be_inside`
+            # now contains the Place we were looking for.
+            return look_in_here
 
-        if check.endswith(' state'):
-            place_name = place_name[:-6]
-            place_type = Place.STATE
-        return place_name, place_type
+        # If we get here, it means we're looking up "Boston" within Massachussets, or "Kern County"
+        # within the United States. In other words, we expect to find at most one place with
+        # this name inside the `must_be_inside` object.
+        #
+        # If we find more than one, it's an error. The name should have been scoped better. This will
+        # happen if you search for "Springfield" or "Lake County" within the United States, instead of
+        # specifying which state you're talking about.
+        _db = Session.object_session(self)
+        qu = Place.lookup_by_name(_db, name).filter(Place.type != self.type)
 
-    @classmethod
-    def lookup_by_name(cls, _db, name, place_type=None):
-        """Look up one or more Places by name.
-        """
-        if not place_type:
-            name, place_type = cls.parse_name(name)
-        qu = _db.query(Place).outerjoin(PlaceAlias).filter(
-            or_(Place.external_name==name, Place.abbreviated_name==name,
-                PlaceAlias.name==name)
-        )
-        if place_type:
-            qu = qu.filter(Place.type==place_type)
+        # Don't look in a place type known to be 'bigger' than this place.
+        exclude_types = Place.larger_place_types(self.type)
+        qu = qu.filter(~Place.type.in_(exclude_types))
+
+        if self.type == self.EVERYWHERE:
+            # The concept of 'inside' is not relevant because every place is 'inside' EVERYWHERE.
+            # We are really trying to find one and only one place with a certain name.
+            pass
         else:
-            # The place type "county" is excluded unless it was
-            # explicitly asked for (e.g. "Cook County"). This is to
-            # avoid ambiguity in the many cases when a state contains
-            # a county and a city with the same name. In all realistic
-            # cases, someone using "Foo" to talk about a library
-            # service area is referring to the city of Foo, not Foo
-            # County -- if they want Foo County they can say "Foo
-            # County".
-            qu = qu.filter(Place.type!=Place.COUNTY)
+            if using_overlap and self.geometry is not None:
+                qu = self.overlaps_not_counting_border(qu)
+            else:
+                parent = aliased(Place)
+                grandparent = aliased(Place)
+                qu = qu.join(parent, Place.parent_id == parent.id)
+                qu = qu.outerjoin(grandparent, parent.parent_id == grandparent.id)
+
+                # For postal codes, but no other types of places, we allow the lookup to skip a level.
+                # This lets you look up "93203" within a state *or* within the nation.
+                postal_code_grandparent_match = and_(Place.type == Place.POSTAL_CODE, grandparent.id == self.id)
+                qu = qu.filter(or_(Place.parent == self, postal_code_grandparent_match))
+
+        places = qu.all()
+        if len(places) == 0:
+            if using_external_source:
+                # We don't have any matching places in the database _now_, but there's a possibility
+                # we can find a representative postal code.
+                return self.lookup_one_through_external_source(name)
+            else:
+                # We're not allowed to use uszipcodes, probably because this method was called by
+                # lookup_through_external_source.
+                return None
+        if len(places) > 1:
+            raise MultipleResultsFound(f"More than one place called {name} inside {self.external_name}.")
+        return places[0]
+
+    def lookup_one_through_external_source(self, name):
+        """
+        Use an external source to find a Place that is a) inside `self`
+        and b) identifies the place human beings call `name`.
+
+        Currently the only way this might work is when using
+        uszipcodes to look up a city inside a state. In this case the result
+        will be a Place representing one of the city's postal codes.
+
+        :return: A Place, or None if the lookup fails.
+        """
+        if self.type != Place.STATE:
+            return None         # uszipcodes keeps track of places in terms of their state.
+
+        search = uszipcode.SearchEngine(
+            db_file_dir=Configuration.DATADIR,
+            simple_zipcode=True
+        )
+        state = self.abbreviated_name
+        uszipcode_matches = []
+        if (state in search.state_to_city_mapper and name in search.state_to_city_mapper[state]):
+            # The given name is an exact match for one of the
+            # cities. Let's look up every ZIP code for that city.
+            uszipcode_matches = search.by_city_and_state(name, state, returns=None)
+
+        # Look up a Place object for each ZIP code and return the
+        # first one we actually know about.
+        #
+        # Set using_external_source to False to eliminate the
+        # possibility of wasted effort or (I don't think this can
+        # happen) infinite recursion.
+        for match in uszipcode_matches:
+            place = self.lookup_inside(match.zipcode, using_external_source=False)
+            if place:
+                return place
+
+    def served_by(self):
+        """
+        Find all Libraries with a ServiceArea whose Place overlaps this Place, not counting the border.
+
+        A Library whose ServiceArea borders this place, but does not intersect this place, is not counted.
+        This way, the state library from the next state over doesn't count as serving your state.
+        """
+        _db = Session.object_session(self)
+        qu = _db.query(Library).join(Library.service_areas).join(ServiceArea.place)
+        qu = self.overlaps_not_counting_border(qu)
         return qu
 
-    @classmethod
-    def lookup_one_by_name(cls, _db, name, place_type=None):
-        return cls.lookup_by_name(_db, name, place_type).one()
+    ##### SQLAlchemy Table properties ########################################  # noqa: E266
 
-    @classmethod
-    def to_geojson(cls, _db, *places):
-        """Convert one or more Place objects to a dictionary that will become
-        a GeoJSON document when converted to JSON.
-        """
-        geojson = select(
-            [func.ST_AsGeoJSON(Place.geometry)]
-        ).where(
-            Place.id.in_([x.id for x in places])
-        )
-        results = [x[0] for x in _db.execute(geojson)]
-        if len(results) == 1:
-            # There's only one item, and it is a valid
-            # GeoJSON document on its own.
-            return json.loads(results[0])
+    __tablename__ = "places"
 
-        # We have either more or less than one valid item.
-        # In either case, a GeometryCollection is appropriate.
-        body = { "type": "GeometryCollection",
-                 "geometries" : [json.loads(x) for x in results] }
-        return body
+    ##### SQLAlchemy non-Column components ###################################  # noqa: E266
 
-    @classmethod
-    def name_parts(cls, name):
-        """Split a nested geographic name into parts.
+    ##### SQLAlchemy Columns #################################################  # noqa: E266
 
-        "Boston, MA" is split into ["MA", "Boston"]
-        "Lake County, Ohio, USA" is split into
-        ["USA", "Ohio", "Lake County"]
+    id = Column(Integer, primary_key=True)
+    type = Column(Unicode(255), index=True, nullable=False)
+    external_id = Column(Unicode, index=True)
+    external_name = Column(Unicode, index=True)
+    abbreviated_name = Column(Unicode, index=True)
+    geometry = Column(Geometry(srid=4326), nullable=True)
 
-        There is no guarantee that these place names correspond to
-        Places in the database.
+    ##### SQLAlchemy Relationships ###########################################  # noqa: E266
 
-        :param name: The name to split into parts.
-        :return: A list of place names, with the largest place at the front
-           of the list.
-        """
-        return [x.strip() for x in reversed(name.split(",")) if x.strip()]
+    parent_id = Column(Integer, ForeignKey('places.id'), index=True)
+    children = relationship("Place", backref=backref("parent", remote_side=[id]), lazy="joined")
+    aliases = relationship("PlaceAlias", backref='place')
+    service_areas = relationship("ServiceArea", backref="place")
+
+    ##### SQLAlchemy Field Validation ########################################  # noqa: E266
+
+    ##### Properties and Getters/Setters #####################################  # noqa: E266
 
     @property
     def library_type(self):
-        """If a library serves this place, what type of library does that make
-        it?
+        """
+        If a library serves this place, what type of library does that make it?
 
         :return: A string; one of the constants from LibraryType.
         """
@@ -1335,29 +1376,68 @@ class Place(Base):
             return library_type
         elif self.type == Place.COUNTY:
             return LibraryType.COUNTY
+
         return LibraryType.LOCAL
 
     @property
-    def human_friendly_name(self):
-        """Generate the sort of string a human would recognize as an
-        unambiguous name for this place.
+    def hierarchy(self):
+        """
+        Returns a list of Place instances representing the parent, parent's parent, etc.
+        """
+        parents = []
+        if self.parent:
+            current_node = self.parent
+            while current_node:
+                parents.append(current_node)
+                current_node = current_node.parent
 
+        return parents
+
+    @property
+    def human_friendly_name(self):
+        """
+        Generate the sort of string a human would recognize as an unambiguous name for this place.
         This is in some sense the opposite of parse_name.
 
-        :return: A string, or None if there is no human-friendly name for
-           this place.
+        Rules:
+            1. If the place is EVERYWHERE, return None
+            2. If the place has no parent, return its external_name
+            3. If the place is a COUNTY with a STATE somewhere in its parentage, return a string concatenated from:
+                - self.external_name,
+                - the string ' County, ' or ' Parish, ' as appropriate
+                - the abbreviated name of the STATE ancestor if defined, or its external name
+            4. If the place is a CITY with a STATE somewhere in its parentage, return a string concatenated from:
+                - self.external_name,
+                - the string ', '
+                - the abbreviated name of the STATE ancestor if defined, or its external name
+            5. In all other cases return the external_name of this place instance
+
+        :return: A string, or None if there is no human-friendly name for this place.
         """
         if self.type == self.EVERYWHERE:
-            # 'everywhere' is not a distinct place with a well-known name.
-            return None
-        if self.parent and self.parent.type == self.STATE:
-            parent = self.parent.abbreviated_name or self.parent.external_name
-            if self.type == Place.COUNTY:
-                # Renfrew County, ON
-                return "{} County, {}".format(self.external_name, parent)
-            elif self.type == Place.CITY:
-                # Montgomery, AL
-                return "{}, {}".format(self.external_name, parent)
+            return None     # 'everywhere' is not a distinct place with a well-known name.
+
+        if not self.parent:
+            return self.external_name
+
+        if (
+            self.type in (self.COUNTY, self.CITY)
+            and any([bool(x.type == Place.STATE) for x in self.hierarchy])
+        ):
+            [state_ancestor] = [p for p in self.hierarchy if p.type == Place.STATE]
+            state_name = state_ancestor.abbreviated_name or state_ancestor.external_name
+            county_word = 'County'
+
+            if state_name.lower() in ['la', 'louisiana']:           # account for Louisiana
+                county_word = 'Parish'
+
+            if (
+                self.type == Place.CITY
+                or county_word.lower() in self.external_name.lower()   # don't do DeKalb County County, GA
+            ):
+                return f"{self.external_name}, {state_name}"
+            else:
+                return f"{self.external_name} {county_word}, {state_name}"
 
         # All other cases:
         #  93203
@@ -1365,212 +1445,167 @@ class Place(Base):
         #  France
         return self.external_name
 
-    def overlaps_not_counting_border(self, qu):
-        """Modifies a filter to find places that have points inside this
-        Place, not counting the border.
-
-        Connecticut has no points inside New York, but the two states
-        share a border. This method creates a more real-world notion
-        of 'inside' that does not count a shared border.
+    ##### Class Methods ######################################################  # noqa: E266
+    @classmethod
+    def everywhere(cls, _db):
         """
-        intersects = Place.geometry.intersects(self.geometry)
-        touches = func.ST_Touches(Place.geometry, self.geometry)
-        return qu.filter(intersects).filter(touches==False)
+        Return a special Place that represents everywhere.
 
-    def lookup_inside(self, name, using_overlap=False, using_external_source=True):
-
-        """Look up a named Place that is geographically 'inside' this Place.
-
-        :param name: The name of a place, such as "Boston" or
-        "Calabasas, CA", or "Cook County".
-
-        :param using_overlap: If this is true, then place A is
-        'inside' place B if their shapes overlap, not counting
-        borders. For example, Montgomery is 'inside' Montgomery
-        County, Alabama, and the United States. However, Alabama is
-        not 'inside' Georgia (even though they share a border).
-
-        If `using_overlap` is false, then place A is 'inside' place B
-        only if B is the .parent of A. In this case, Alabama is
-        considered to be 'inside' the United States, but Montgomery is
-        not -- the only place it's 'inside' is Alabama. Checking this way
-        is much faster, so it's the default.
-
-        :param using_external_source: If this is True, then if no named
-        place can be found in the database, the uszipcodes library
-        will be used in an attempt to find some equivalent postal codes.
-
-        :return: A Place object, or None if no match could be found.
-
-        :raise MultipleResultsFound: If more than one Place with the
-        given name is 'inside' this Place.
-
+        This place has no .geometry, so attempts to use it in geographic comparisons will fail.
         """
-        parts = Place.name_parts(name)
-        if len(parts) > 1:
-            # We're trying to look up a scoped name such as "Boston,
-            # MA". `name_parts` has turned "Boston, MA" into ["MA",
-            # "Boston"].
-            #
-            # Now we need to look for "MA" inside ourselves, and then
-            # look for "Boston" inside the object we get back.
-            look_in_here = self
-            for part in parts:
-                look_in_here = look_in_here.lookup_inside(part, using_overlap)
-                if not look_in_here:
-                    # A link in the chain has failed. Return None
-                    # immediately.
-                    return None
-            # Every link in the chain has succeeded, and `must_be_inside`
-            # now contains the Place we were looking for.
-            return look_in_here
-
-        # If we get here, it means we're looking up "Boston" within
-        # Massachussets, or "Kern County" within the United States.
-        # In other words, we expect to find at most one place with
-        # this name inside the `must_be_inside` object.
-        #
-        # If we find more than one, it's an error. The name should
-        # have been scoped better. This will happen if you search for
-        # "Springfield" or "Lake County" within the United States,
-        # instead of specifying which state you're talking about.
-        _db = Session.object_session(self)
-        qu = Place.lookup_by_name(_db, name).filter(Place.type!=self.type)
-
-        # Don't look in a place type known to be 'bigger' than this
-        # place.
-        exclude_types = Place.larger_place_types(self.type)
-        qu = qu.filter(~Place.type.in_(exclude_types))
-
-        if self.type==self.EVERYWHERE:
-            # The concept of 'inside' is not relevant because every
-            # place is 'inside' EVERYWHERE. We are really trying to
-            # find one and only one place with a certain name.
-            pass
-        else:
-            if using_overlap and self.geometry is not None:
-                qu = self.overlaps_not_counting_border(qu)
-            else:
-                parent = aliased(Place)
-                grandparent = aliased(Place)
-                qu = qu.join(parent, Place.parent_id==parent.id)
-                qu = qu.outerjoin(grandparent, parent.parent_id==grandparent.id)
-
-                # For postal codes, but no other types of places, we
-                # allow the lookup to skip a level. This lets you look
-                # up "93203" within a state *or* within the nation.
-                postal_code_grandparent_match = and_(
-                    Place.type==Place.POSTAL_CODE, grandparent.id==self.id,
-                )
-                qu = qu.filter(
-                    or_(Place.parent==self, postal_code_grandparent_match)
-                )
-
-        places = qu.all()
-        if len(places) == 0:
-            if using_external_source:
-                # We don't have any matching places in the database _now_,
-                # but there's a possibility we can find a representative
-                # postal code.
-                return self.lookup_one_through_external_source(name)
-            else:
-                # We're not allowed to use uszipcodes, probably
-                # because this method was called by
-                # lookup_through_external_source.
-                return None
-        if len(places) > 1:
-            raise MultipleResultsFound(
-                "More than one place called %s inside %s." % (
-                    name, self.external_name
-                )
-            )
-        return places[0]
-
-    def lookup_one_through_external_source(self, name):
-        """Use an external source to find a Place that is a) inside `self`
-        and b) identifies the place human beings call `name`.
-
-        Currently the only way this might work is when using
-        uszipcodes to look up a city inside a state. In this case the result
-        will be a Place representing one of the city's postal codes.
-
-        :return: A Place, or None if the lookup fails.
-        """
-        if self.type != Place.STATE:
-            # uszipcodes keeps track of places in terms of their state.
-            return None
-
-        _db = Session.object_session(self)
-        search = uszipcode.SearchEngine(
-            db_file_dir=Configuration.DATADIR,
-            simple_zipcode=True
+        (place, _) = get_one_or_create(
+            _db, Place, type=cls.EVERYWHERE,
+            create_method_kwargs={"external_id": "Everywhere", "external_name": "Everywhere"}
         )
-        state = self.abbreviated_name
-        uszipcode_matches = []
-        if (state in search.state_to_city_mapper
-            and name in search.state_to_city_mapper[state]):
-            # The given name is an exact match for one of the
-            # cities. Let's look up every ZIP code for that city.
-            uszipcode_matches = search.by_city_and_state(
-                name, state, returns=None
-            )
+        return place
 
-        # Look up a Place object for each ZIP code and return the
-        # first one we actually know about.
-        #
-        # Set using_external_source to False to eliminate the
-        # possibility of wasted effort or (I don't think this can
-        # happen) infinite recursion.
-        for match in uszipcode_matches:
-            place = self.lookup_inside(
-                match.zipcode, using_external_source=False
-            )
-            if place:
-                return place
+    @classmethod
+    def default_nation(cls, _db):
+        """Return the default nation for this library registry.
 
-    def served_by(self):
-        """Find all Libraries with a ServiceArea whose Place overlaps
-        this Place, not counting the border.
+        If an incoming coverage area doesn't mention a nation, we'll assume it's within this nation.
 
-        A Library whose ServiceArea borders this place, but does not
-        intersect this place, is not counted. This way, the state
-        library from the next state over doesn't count as serving your
-        state.
+        :return: The default nation, if one can be found. Otherwise, None.
         """
-        _db = Session.object_session(self)
-        qu = _db.query(Library).join(Library.service_areas).join(
-            ServiceArea.place)
-        qu = self.overlaps_not_counting_border(qu)
+        default_nation = None
+        abbreviation = ConfigurationSetting.sitewide(_db, Configuration.DEFAULT_NATION_ABBREVIATION).value
+        if abbreviation:
+            default_nation = get_one(_db, Place, type=Place.NATION, abbreviated_name=abbreviation)
+            if not default_nation:
+                logging.error(f"Could not look up default nation {abbreviation}")
+        return default_nation
+
+    @classmethod
+    def larger_place_types(cls, type):
+        """
+        Return a list of place types known to be bigger than `type`.
+
+        Places don't form a strict heirarchy. In particular, ZIP codes are not 'smaller' than cities.
+        But counties and cities are smaller than states, and states are smaller than nations, so
+        if you're searching inside a state for a place called "Japan", you know that the nation of
+        Japan is not what you're looking for.
+        """
+        larger = [Place.EVERYWHERE]
+        if type not in (Place.NATION, Place.EVERYWHERE):
+            larger.append(Place.NATION)
+        if type in (Place.COUNTY, Place.CITY, Place.POSTAL_CODE):
+            larger.append(Place.STATE)
+        if type == Place.CITY:
+            larger.append(Place.COUNTY)
+        return larger
+
+    @classmethod
+    def parse_name(cls, place_name):
+        """
+        Try to extract a place type from a name.
+
+        :return: A 2-tuple (place_name, place_type)
+
+        e.g. "Kern County" becomes ("Kern", Place.COUNTY); "Arizona State" becomes ("Arizona", Place.STATE);
+            "Chicago" becaomes ("Chicago", None)
+        """
+        check = place_name.lower()
+        place_type = None
+        if check.endswith(' county'):
+            place_name = place_name[:-7]
+            place_type = Place.COUNTY
+
+        if check.endswith(' state'):
+            place_name = place_name[:-6]
+            place_type = Place.STATE
+        return place_name, place_type
+
+    @classmethod
+    def lookup_by_name(cls, _db, name, place_type=None):
+        """Look up one or more Places by name"""
+        if not place_type:
+            name, place_type = cls.parse_name(name)
+
+        qu = _db.query(Place).outerjoin(PlaceAlias).filter(
+            or_(Place.external_name == name, Place.abbreviated_name == name, PlaceAlias.name == name)
+        )
+
+        if place_type:
+            qu = qu.filter(Place.type == place_type)
+        else:
+            # The place type "county" is excluded unless it was explicitly asked for (e.g. "Cook County").
+            # This is to avoid ambiguity in the many cases when a state contains a county and a city with
+            # the same name. In all realistic cases, someone using "Foo" to talk about a library service area
+            # is referring to the city of Foo, not Foo County -- if they want Foo County they can say "Foo County".
+            qu = qu.filter(Place.type != Place.COUNTY)
+
         return qu
 
-    def __repr__(self):
-        if self.parent:
-            parent = self.parent.external_name
-        else:
-            parent = None
-        if self.abbreviated_name:
-            abbr = "abbr=%s " % self.abbreviated_name
-        else:
-            abbr = ''
-        output = "<Place: %s type=%s %sexternal_id=%s parent=%s>" % (
-            self.external_name, self.type, abbr, self.external_id, parent
+    @classmethod
+    def lookup_one_by_name(cls, _db, name, place_type=None):
+        return cls.lookup_by_name(_db, name, place_type).one()
+
+    @classmethod
+    def to_geojson(cls, _db, *places):
+        """Convert 1+ Place objects to a dict that will become a GeoJSON document when converted to JSON"""
+        geojson = select(
+            [func.ST_AsGeoJSON(Place.geometry)]
+        ).where(
+            Place.id.in_([x.id for x in places])
         )
-        return str(output)
+        results = [x[0] for x in _db.execute(geojson)]
+        if len(results) == 1:
+            # There's only one item, and it is a valid GeoJSON document on its own.
+            return json.loads(results[0])
+
+        # We have either more or less than one valid item. In either case, a GeometryCollection is appropriate.
+        body = {"type": "GeometryCollection", "geometries": [json.loads(x) for x in results]}
+        return body
+
+    @classmethod
+    def name_parts(cls, name):
+        """
+        Split a nested geographic name into parts.
+
+        "Boston, MA" is split into ["MA", "Boston"]
+        "Lake County, Ohio, USA" is split into ["USA", "Ohio", "Lake County"]
+
+        There is no guarantee that these place names correspond to Places in the database.
+
+        :param name: The name to split into parts.
+        :return: A list of place names, with the largest place at the front of the list.
+        """
+        return [x.strip() for x in reversed(name.split(",")) if x.strip()]
 
 
 class PlaceAlias(Base):
-
     """An alternate name for a place."""
+
+    ##### Class Constants ####################################################  # noqa: E266
+
+    ##### Public Interface / Magic Methods ###################################  # noqa: E266
+
+    ##### SQLAlchemy Table properties ########################################  # noqa: E266
+
     __tablename__ = 'placealiases'
-
-    id = Column(Integer, primary_key=True)
-    place_id = Column(Integer, ForeignKey('places.id'), index=True)
-    name = Column(Unicode, index=True)
-    language = Column(Unicode(3), index=True)
-
     __table_args__ = (
         UniqueConstraint('place_id', 'name', 'language'),
     )
+
+    ##### SQLAlchemy non-Column components ###################################  # noqa: E266
+
+    ##### SQLAlchemy Columns #################################################  # noqa: E266
+
+    id = Column(Integer, primary_key=True)
+    name = Column(Unicode, index=True)
+    language = Column(Unicode(3), index=True)
+
+    ##### SQLAlchemy Relationships ###########################################  # noqa: E266
+
+    place_id = Column(Integer, ForeignKey('places.id'), index=True)
+
+    ##### SQLAlchemy Field Validation ########################################  # noqa: E266
+
+    ##### Properties and Getters/Setters #####################################  # noqa: E266
+
+    ##### Class Methods ######################################################  # noqa: E266
+
+    ##### Private Class Methods ##############################################  # noqa: E266
 
 
 class Audience(Base):
