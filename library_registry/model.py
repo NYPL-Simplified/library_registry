@@ -2131,58 +2131,186 @@ class ExternalIntegration(Base):
 
 
 class ConfigurationSetting(Base):
-    """An extra piece of site configuration.
-
-    A ConfigurationSetting may be associated with an
-    ExternalIntegration, a Library, both, or neither.
-
-    * The secret used by the circulation manager to sign OAuth bearer
-      tokens is not associated with an ExternalIntegration or with a
-      Library.
-
-    * The link to a library's privacy policy is associated with the
-      Library, but not with any particular ExternalIntegration.
-
-    * The "website ID" for an Overdrive collection is associated with
-      an ExternalIntegration (the Overdrive integration), but not with
-      any particular Library (since multiple libraries might share an
-      Overdrive collection).
-
-    * The "identifier prefix" used to determine which library a patron
-      is a patron of, is associated with both a Library and an
-      ExternalIntegration.
     """
-    __tablename__ = 'configurationsettings'
-    id = Column(Integer, primary_key=True)
-    external_integration_id = Column(
-        Integer, ForeignKey('externalintegrations.id'), index=True
-    )
-    library_id = Column(
-        Integer, ForeignKey('libraries.id'), index=True
-    )
-    key = Column(Unicode, index=True)
-    _value = Column(Unicode, name="value")
+    An extra piece of site configuration.
 
+    A ConfigurationSetting may be associated with an ExternalIntegration, a Library, both, or neither.
+
+    * The secret used by the circulation manager to sign OAuth bearer tokens is not associated with an
+      ExternalIntegration or with a Library.
+
+    * The link to a library's privacy policy is associated with the Library, but not with any particular
+      ExternalIntegration.
+
+    * The "website ID" for an Overdrive collection is associated with an ExternalIntegration (the
+      Overdrive integration), but not with any particular Library (since multiple libraries might share
+      an Overdrive collection).
+
+    * The "identifier prefix" used to determine which library a patron is a patron of, is associated with
+      both a Library and an ExternalIntegration.
+    """
+    ##### Class Constants ####################################################  # noqa: E266
+
+    MEANS_YES = set(['true', 't', 'yes', 'y'])
+    SECRET_SETTING_KEYWORDS = set(['password', 'secret'])
+
+    ##### Public Interface / Magic Methods ###################################  # noqa: E266
+
+    def __repr__(self):
+        return '<ConfigurationSetting: key=%s, ID=%d>' % (self.key, self.id)
+
+    def setdefault(self, default=None):
+        """If no value is set, set it to `default`. Then return the current value."""
+        if self.value is None:
+            self.value = default
+
+        return self.value
+
+    def value_or_default(self, default):
+        """
+        Return the value of this setting. If the value is None, set it to `default` and return that instead.
+        """
+        if self.value is None:
+            self.value = default
+
+        return self.value
+
+    ##### SQLAlchemy Table properties ########################################  # noqa: E266
+
+    __tablename__ = 'configurationsettings'
     __table_args__ = (
         UniqueConstraint('external_integration_id', 'library_id', 'key'),
     )
 
-    def __repr__(self):
-        return '<ConfigurationSetting: key=%s, ID=%d>' % (
-            self.key, self.id)
+    ##### SQLAlchemy non-Column components ###################################  # noqa: E266
+
+    ##### SQLAlchemy Columns #################################################  # noqa: E266
+
+    id = Column(Integer, primary_key=True)
+    key = Column(Unicode, index=True)
+    _value = Column(Unicode, name="value")
+
+    ##### SQLAlchemy Relationships ###########################################  # noqa: E266
+
+    external_integration_id = Column(Integer, ForeignKey('externalintegrations.id'), index=True)
+    library_id = Column(Integer, ForeignKey('libraries.id'), index=True)
+
+    ##### SQLAlchemy Field Validation ########################################  # noqa: E266
+
+    ##### Properties and Getters/Setters #####################################  # noqa: E266
+
+    @property
+    def library(self):
+        _db = Session.object_session(self)
+        if self.library_id:
+            return get_one(_db, Library, id=self.library_id)
+        return None
+
+    @hybrid_property
+    def value(self):
+        """
+        What's the current value of this configuration setting?
+
+        If not present, the value may be inherited from some other ConfigurationSetting.
+        """
+        if self._value:             # An explicitly set value always takes precedence.
+            return self._value
+        elif self.library_id and self.external_integration:
+            # This is a library-specific specialization of an ExternalIntegration. Treat
+            # the value set on the ExternalIntegration as a default.
+            return self.for_externalintegration(self.key, self.external_integration).value
+        elif self.library_id:
+            # This is a library-specific setting. Treat the site-wide value as a default.
+            _db = Session.object_session(self)
+            return self.sitewide(_db, self.key).value
+
+        return self._value
+
+    @value.setter
+    def value(self, new_value):
+        self._value = new_value
+
+    @property
+    def is_secret(self):
+        """Should the value of this key be treated as secret?"""
+        return self._is_secret(self.key)
+
+    @property
+    def bool_value(self):
+        """
+        Turn the value into a boolean if possible.
+
+        :return: A boolean, or None if there is no value.
+        """
+        if self.value is None:  # doing `if self.value` misses on explicit boolean False
+            return None
+        else:
+            return True if str(self.value).lower() in self.MEANS_YES else False
+
+    @property
+    def int_value(self):
+        """
+        Turn the value into an int if possible.
+
+        :return: An integer, or None if there is no value.
+        """
+        try:
+            if isinstance(self.value, bool):    # int(True) and int(False) eval to 1/0, respectively
+                raise TypeError
+
+            return int(float(self.value))   # cast to float first, to turn '1.1' into 1.1, which can convert to 1
+        except (ValueError, TypeError):
+            ...
+
+        return None
+
+    @property
+    def float_value(self):
+        """
+        Turn the value into an float if possible.
+
+        :return: A float, or None if the value cannot be cast to float.
+        """
+        try:
+            if isinstance(self.value, bool):    # int(True) and int(False) eval to 1/0, respectively
+                raise TypeError
+
+            return float(self.value)
+        except (ValueError, TypeError):
+            ...
+
+        return None
+
+    @property
+    def json_value(self):
+        """
+        Interpret the value as JSON if possible.
+
+        :return: An object, or None if there is no value.
+        """
+        try:
+            return json.loads(self.value)
+        except (TypeError, json.decoder.JSONDecodeError):
+            ...
+
+        return None
+
+    ##### Class Methods ######################################################  # noqa: E266
 
     @classmethod
     def sitewide_secret(cls, _db, key):
-        """Find or create a sitewide shared secret.
+        """
+        Find or create a sitewide shared secret.
 
-        The value of this setting doesn't matter, only that it's
-        unique across the site and that it's always available.
+        The value of this setting doesn't matter, only that it's unique across the site and that
+        it's always available.
         """
         secret = ConfigurationSetting.sitewide(_db, key)
+
         if not secret.value:
             secret.value = generate_secret()
-            # Commit to get this in the database ASAP.
-            _db.commit()
+            _db.commit()    # Commit to get this in the database ASAP.
+
         return secret.value
 
     @classmethod
@@ -2191,17 +2319,25 @@ class ConfigurationSetting(Base):
         lines = []
         site_wide_settings = []
 
-        for setting in _db.query(ConfigurationSetting).filter(
-                ConfigurationSetting.library_id==None).filter(
-                    ConfigurationSetting.external_integration==None):
+        settings_to_explain = _db.query(ConfigurationSetting).filter(
+                ConfigurationSetting.library_id == None                 # noqa: E711
+            ).filter(
+                ConfigurationSetting.external_integration == None       # noqa: E711
+            )
+
+        for setting in settings_to_explain:
             if not include_secrets and setting.key.endswith("_secret"):
                 continue
+
             site_wide_settings.append(setting)
+
         if site_wide_settings:
             lines.append("Site-wide configuration settings:")
             lines.append("---------------------------------")
+
         for setting in sorted(site_wide_settings, key=lambda s: s.key):
             lines.append("%s='%s'" % (setting.key, setting.value))
+
         return lines
 
     @classmethod
@@ -2217,149 +2353,39 @@ class ConfigurationSetting(Base):
 
     @classmethod
     def for_externalintegration(cls, key, externalintegration):
-        """Find or create a ConfigurationSetting for the given
-        ExternalIntegration.
-        """
+        """Find or create a ConfigurationSetting for the given ExternalIntegration."""
         _db = Session.object_session(externalintegration)
-        return cls.for_library_and_externalintegration(
-            _db, key, None, externalintegration
-        )
+        return cls.for_library_and_externalintegration(_db, key, None, externalintegration)
 
     @classmethod
-    def for_library_and_externalintegration(
-            cls, _db, key, library, external_integration
-    ):
-        """Find or create a ConfigurationSetting associated with a Library
-        and an ExternalIntegration.
+    def for_library_and_externalintegration(cls, _db, key, library, external_integration):
+        """
+        Find or create a ConfigurationSetting associated with a Library and an ExternalIntegration.
         """
         library_id = None
+
         if library:
             library_id = library.id
-        setting, ignore = get_one_or_create(
-            _db, ConfigurationSetting,
-            library_id=library_id, external_integration=external_integration,
-            key=key
-        )
+
+        (setting, _) = get_one_or_create(_db, ConfigurationSetting,
+                                         library_id=library_id,
+                                         external_integration=external_integration,
+                                         key=key)
+
         return setting
 
-    @property
-    def library(self):
-        _db = Session.object_session(self)
-        if self.library_id:
-            return get_one(_db, Library, id=self.library_id)
-        return None
-
-    @hybrid_property
-    def value(self):
-        """What's the current value of this configuration setting?
-
-        If not present, the value may be inherited from some other
-        ConfigurationSetting.
-        """
-        if self._value:
-            # An explicitly set value always takes precedence.
-            return self._value
-        elif self.library_id and self.external_integration:
-            # This is a library-specific specialization of an
-            # ExternalIntegration. Treat the value set on the
-            # ExternalIntegration as a default.
-            return self.for_externalintegration(
-                self.key, self.external_integration).value
-        elif self.library_id:
-            # This is a library-specific setting. Treat the site-wide
-            # value as a default.
-            _db = Session.object_session(self)
-            return self.sitewide(_db, self.key).value
-        return self._value
-
-    @value.setter
-    def value(self, new_value):
-        self._value = new_value
-
-    def setdefault(self, default=None):
-        """If no value is set, set it to `default`.
-        Then return the current value.
-        """
-        if self.value is None:
-            self.value = default
-        return self.value
+    ##### Private Class Methods ##############################################  # noqa: E266
 
     @classmethod
     def _is_secret(self, key):
-        """Should the value of the given key be treated as secret?
-
-        This will have to do, in the absence of programmatic ways of
-        saying that a specific setting should be treated as secret.
         """
-        return any(
-            key == x or
-            key.startswith('%s_' % x) or
-            key.endswith('_%s' % x) or
-            ("_%s_" %x) in key
-            for x in ('secret', 'password')
-        )
+        Should the value of the given key be treated as secret?
 
-    @property
-    def is_secret(self):
-        """Should the value of this key be treated as secret?"""
-        return self._is_secret(self.key)
-
-    def value_or_default(self, default):
-        """Return the value of this setting. If the value is None,
-        set it to `default` and return that instead.
+        This will have to do, in the absence of programmatic ways of saying that a specific
+        setting should be treated as secret.
         """
-        if self.value is None:
-            self.value = default
-        return self.value
+        return any(keyword in key.lower() for keyword in self.SECRET_SETTING_KEYWORDS)
 
-    MEANS_YES = set(['true', 't', 'yes', 'y'])
-    @property
-    def bool_value(self):
-        """Turn the value into a boolean if possible.
-
-        :return: A boolean, or None if there is no value.
-        """
-        if self.value:
-            if self.value.lower() in self.MEANS_YES:
-                return True
-            return False
-        return None
-
-    @property
-    def int_value(self):
-        """Turn the value into an int if possible.
-
-        :return: An integer, or None if there is no value.
-
-        :raise ValueError: If the value cannot be converted to an int.
-        """
-        if self.value:
-            return int(self.value)
-        return None
-
-    @property
-    def float_value(self):
-        """Turn the value into an float if possible.
-
-        :return: A float, or None if there is no value.
-
-        :raise ValueError: If the value cannot be converted to a float.
-        """
-        if self.value:
-            return float(self.value)
-        return None
-
-    @property
-    def json_value(self):
-        """Interpret the value as JSON if possible.
-
-        :return: An object, or None if there is no value.
-
-        :raise ValueError: If the value cannot be parsed as JSON.
-        """
-        if self.value:
-            return json.loads(self.value)
-        return None
 
 # Join tables for many-to-many relationships
 
