@@ -1,61 +1,30 @@
-import datetime
-import logging
 import json
+import logging
 import random
 import re
 import string
-import uszipcode
 import uuid
 import warnings
-from collections import Counter, defaultdict
+from collections import defaultdict
+from datetime import datetime, timedelta
 
+import uszipcode
 from flask_babel import lazy_gettext as lgt
-from flask_bcrypt import (
-    check_password_hash,
-    generate_password_hash
-)
+from flask_bcrypt import check_password_hash, generate_password_hash
 from geoalchemy2 import Geography, Geometry
-from psycopg2.extensions import adapt as sqlescape
-from sqlalchemy import (
-    Boolean,
-    Column,
-    DateTime,
-    Enum,
-    ForeignKey,
-    Index,
-    Integer,
-    String,
-    Table,
-    Unicode,
-    create_engine,
-    exc as sa_exc,
-    func,
-    UniqueConstraint,
-)
+from sqlalchemy import (Boolean, Column, DateTime, Enum, ForeignKey, Index,
+                        Integer, String, Table, Unicode, UniqueConstraint,
+                        create_engine)
+from sqlalchemy import exc as sa_exc
+from sqlalchemy import func
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.ext.hybrid import hybrid_property
-from sqlalchemy.orm import (
-    aliased,
-    backref,
-    relationship,
-    sessionmaker,
-    validates,
-)
+from sqlalchemy.orm import (aliased, backref, relationship, sessionmaker,
+                            validates)
 from sqlalchemy.orm.exc import MultipleResultsFound
 from sqlalchemy.orm.session import Session
-from sqlalchemy.sql import compiler
-from sqlalchemy.sql.expression import (
-    cast,
-    literal_column,
-    or_,
-    and_,
-    case,
-    select,
-    join,
-    outerjoin,
-)
+from sqlalchemy.sql.expression import (and_, cast, or_, select)
 
-from library_registry.config import Configuration
 from library_registry.constants import (
     LibraryType,
     PLACE_CITY,
@@ -66,34 +35,43 @@ from library_registry.constants import (
     PLACE_POSTAL_CODE,
     PLACE_STATE,
 )
+from library_registry.config import Configuration
 from library_registry.emailer import Emailer
-from library_registry.model_helpers import create, generate_secret, get_one, get_one_or_create
+from library_registry.model_helpers import (create, generate_secret, get_one, get_one_or_create)
 from library_registry.util import GeometryUtility
 from library_registry.util.language import LanguageCodes
 
 
+DEBUG = False
+Base = declarative_base()
+
+
 def production_session():
     url = Configuration.database_url()
-    logging.debug("Database url: %s", url)
+    logging.debug(f"Database url: {url}")
     _db = SessionManager.session(url)
 
-    # The first thing to do after getting a database connection is to
-    # set up the logging configuration.
+    # The first thing to do after getting a database connection is to set up the logging configuration.
     #
-    # If called during a unit test, this will configure logging
-    # incorrectly, but 1) this method isn't normally called during
-    # unit tests, and 2) package_setup() will call initialize() again
-    # with the right arguments.
+    # If called during a unit test, this will configure logging incorrectly, but 1) this method isn't
+    # normally called during unit tests, and 2) package_setup() will call initialize() again with the
+    # right arguments.
     from library_registry.log import LogConfiguration
     LogConfiguration.initialize(_db)
     return _db
 
-DEBUG = False
 
-
-class SessionManager(object):
-
+class SessionManager:
+    ##### Class Constants ####################################################  # noqa: E266
     engine_for_url = {}
+
+    ##### Public Interface / Magic Methods ###################################  # noqa: E266
+
+    ##### Private Methods ####################################################  # noqa: E266
+
+    ##### Properties and Getters/Setters #####################################  # noqa: E266
+
+    ##### Class Methods ######################################################  # noqa: E266
 
     @classmethod
     def engine(cls, url=None):
@@ -115,7 +93,6 @@ class SessionManager(object):
 
         Base.metadata.create_all(engine)
 
-
         cls.engine_for_url[url] = engine
         return engine, engine.connect()
 
@@ -134,22 +111,7 @@ class SessionManager(object):
     def initialize_data(cls, session):
         pass
 
-
-def dump_query(query):
-    dialect = query.session.bind.dialect
-    statement = query.statement
-    comp = compiler.SQLCompiler(dialect, statement)
-    comp.compile()
-    enc = dialect.encoding
-    params = {}
-    for k,v in comp.params.items():
-        if isinstance(v, str):
-            v = v.encode(enc)
-        params[k] = sqlescape(v)
-    return (comp.string.encode(enc) % params).decode(enc)
-
-
-Base = declarative_base()
+    ##### Private Class Methods ##############################################  # noqa: E266
 
 
 class Library(Base):
@@ -196,8 +158,8 @@ class Library(Base):
 
     # When our record of this library was last updated.
     timestamp = Column(DateTime, index=True,
-                       default=lambda: datetime.datetime.utcnow(),
-                       onupdate=lambda: datetime.datetime.utcnow())
+                       default=lambda: datetime.utcnow(),
+                       onupdate=lambda: datetime.utcnow())
 
     # The library's logo, as a data: URI.
     logo = Column(Unicode)
@@ -215,9 +177,9 @@ class Library(Base):
     # TESTING_STAGE.
     #
     # Otherwise, the library is in PRODUCTION_STAGE.
-    TESTING_STAGE = 'testing'       # Library should show up in test feed
-    PRODUCTION_STAGE = 'production' # Library should show up in production feed
-    CANCELLED_STAGE = 'cancelled'   # Library should not show up in any feed
+    TESTING_STAGE = 'testing'        # Library should show up in test feed
+    PRODUCTION_STAGE = 'production'  # Library should show up in production feed
+    CANCELLED_STAGE = 'cancelled'    # Library should not show up in any feed
     stage_enum = Enum(
         TESTING_STAGE, PRODUCTION_STAGE, CANCELLED_STAGE, name='library_stage'
     )
@@ -262,8 +224,7 @@ class Library(Base):
     service_areas = relationship('ServiceArea', backref='library')
 
     # A library may serve one or more specific audiences.
-    audiences = relationship('Audience', secondary='libraries_audiences',
-                            back_populates="libraries")
+    audiences = relationship('Audience', secondary='libraries_audiences', back_populates="libraries")
 
     # The registry may have information about the library's
     # collections of materials. The registry doesn't need to know
@@ -370,8 +331,8 @@ class Library(Base):
         if not self.in_production:
             return 0
         query = db.query(DelegatedPatronIdentifier).filter(
-            DelegatedPatronIdentifier.type==DelegatedPatronIdentifier.ADOBE_ACCOUNT_ID,
-            DelegatedPatronIdentifier.library_id==self.id
+            DelegatedPatronIdentifier.type == DelegatedPatronIdentifier.ADOBE_ACCOUNT_ID,
+            DelegatedPatronIdentifier.library_id == self.id
         )
         return query.count()
 
@@ -386,7 +347,7 @@ class Library(Base):
         """
         # The concept of 'patron count' only makes sense for
         # production libraries.
-        library_ids = [l.id for l in libraries if l.in_production]
+        library_ids = [lib.id for lib in libraries if lib.in_production]
 
         # Run the SQL query.
         counts = select(
@@ -395,7 +356,7 @@ class Library(Base):
                 func.count(DelegatedPatronIdentifier.id)
             ],
         ).where(
-            and_(DelegatedPatronIdentifier.type==DelegatedPatronIdentifier.ADOBE_ACCOUNT_ID,
+            and_(DelegatedPatronIdentifier.type == DelegatedPatronIdentifier.ADOBE_ACCOUNT_ID,
                  DelegatedPatronIdentifier.library_id.in_(library_ids))
         ).group_by(
             DelegatedPatronIdentifier.library_id
@@ -520,7 +481,7 @@ class Library(Base):
         if production:
             # Both parties must agree that this library is
             # production-ready.
-            return and_(library_field==prod, registry_field==prod)
+            return and_(library_field == prod, registry_field == prod)
         else:
             # Both parties must agree that this library is _either_
             # in the production stage or the testing stage.
@@ -528,225 +489,6 @@ class Library(Base):
                 library_field.in_((prod, test)),
                 registry_field.in_((prod, test))
             )
-
-    @classmethod
-    def relevant(cls, _db, target, language, audiences=None, production=True):
-        """Find libraries that are most relevant for a user.
-
-        :param target: The user's current location. May be a Geometry object or
-        a 2-tuple (latitude, longitude).
-        :param language: The ISO 639-1 code for the user's language.
-        :param audiences: List of audiences the user is a member of.
-        By default, only libraries with the PUBLIC audience are shown.
-        :param production: If True, only libraries that are ready for
-            production are shown.
-
-        :return A Counter mapping Library objects to scores.
-        """
-
-        # Constants that determine the weights of different components of the score.
-        # These may need to be adjusted when there are more libraries in the system to
-        # test with.
-        base_score = 1
-        audience_factor = 1.01
-        collection_size_factor = 1000
-        focus_area_distance_factor = 0.005
-        eligibility_area_distance_factor = 0.1
-        focus_area_size_factor = 0.00000001
-        score_threshold = 0.00001
-
-        # By default, only show libraries that are for the general public.
-        audiences = audiences or [Audience.PUBLIC]
-
-        # Convert the target to a single point.
-        if isinstance(target, tuple):
-            target = GeometryUtility.point(*target)
-
-        # Convert the language to 3-letter code.
-        language_code = LanguageCodes.string_to_alpha_3(language)
-
-        # Set up an alias for libraries and collection summaries for use in subqueries.
-        libraries_collections = outerjoin(
-            Library, CollectionSummary,
-            Library.id==CollectionSummary.library_id
-        ).alias("libraries_collections")
-
-        # Check if each library has a public audience.
-        public_audiences_subquery = select(
-            [func.count()]
-        ).where(
-            and_(
-                Audience.name==Audience.PUBLIC,
-                libraries_audiences.c.library_id==libraries_collections.c.libraries_id,
-            )
-        ).select_from(
-            libraries_audiences.join(Audience)
-        ).lateral("public_audiences")
-
-        # Check if each library has a non-public audience from
-        # the user's audiences.
-        non_public_audiences_subquery = select(
-            [func.count()]
-        ).where(
-            and_(
-                Audience.name!=Audience.PUBLIC,
-                Audience.name.in_(audiences),
-                libraries_audiences.c.library_id==libraries_collections.c.libraries_id,
-            )
-        ).select_from(
-            libraries_audiences.join(Audience)
-        ).lateral("non_public_audiences")
-
-        # Increase the score if there was an audience match other than
-        # public, and set it to 0 if there's no match at all.
-        score = case(
-            [
-             # Audience match other than public.
-             (non_public_audiences_subquery!=literal_column(str(0)),
-              literal_column(str(base_score * audience_factor))),
-             # Public audience.
-             (public_audiences_subquery!=literal_column(str(0)),
-              literal_column(str(base_score)))
-            ],
-            # No match.
-            else_=literal_column(str(0)),
-        )
-
-        # Function that decreases exponentially as its input increases.
-        def exponential_decrease(value):
-            original_exponent = -1 * value
-            # Prevent underflow and overflow errors by ensuring
-            # the exponent is between -500 and 500.
-            exponent = case(
-                [(original_exponent > 500, literal_column(str(500))),
-                 (original_exponent < -500, literal_column(str(-500)))],
-                else_=original_exponent)
-            return func.exp(exponent)
-
-        # Get the maximum collection size for the user's language.
-        collections_by_size = _db.query(CollectionSummary).filter(
-            CollectionSummary.language==language_code).order_by(
-            CollectionSummary.size.desc())
-
-        if collections_by_size.count() == 0:
-            max = 0
-        else:
-            max = collections_by_size.first().size
-
-        # Only take collection size into account in the ranking if there's at
-        # least one library with a non-empty collection in the user's language.
-        if max > 0:
-            # If we don't have any information about a library's collection size,
-            # we'll just say there's one book. That way the library is ranked above
-            # a library we know has 0 books, but below any libraries with more.
-            # Maybe this should be larger, or should consider languages other than
-            # the user's language.
-            estimated_size = case(
-                [(libraries_collections.c.collectionsummaries_id==None, literal_column("1"))],
-                else_=libraries_collections.c.collectionsummaries_size
-            )
-            score_multiplier = (1 - exponential_decrease(1.0 * collection_size_factor * estimated_size / max))
-            score = score * score_multiplier
-
-        # Create a subquery for a type of service area.
-        def service_area_subquery(type):
-            return select(
-                [Place.geometry, Place.type]
-            ).where(
-                and_(
-                    ServiceArea.library_id==libraries_collections.c.libraries_id,
-                    ServiceArea.type==type,
-                )
-            ).select_from(
-                join(
-                    ServiceArea, Place,
-                    ServiceArea.place_id==Place.id
-                )
-            ).lateral()
-
-        # Find each library's eligibility areas.
-        eligibility_areas_subquery = service_area_subquery(ServiceArea.ELIGIBILITY)
-
-        # Find each library's focus areas.
-        focus_areas_subquery = service_area_subquery(ServiceArea.FOCUS)
-
-        # Get the minimum distance from the target to any service area returned
-        # by the subquery, in km. If a service area is "everywhere", the distance
-        # is 0.
-        def min_distance(subquery):
-            return func.min(
-                case(
-                    [(subquery.c.type==Place.EVERYWHERE, literal_column(str(0)))],
-                    else_=func.ST_DistanceSphere(target, subquery.c.geometry)
-                )
-            ) / 1000
-
-        # Minimum distance to any eligibility area.
-        eligibility_min_distance = min_distance(eligibility_areas_subquery)
-
-        # Minimum distance to any focus area.
-        focus_min_distance = min_distance(focus_areas_subquery)
-
-        # Decrease the score based on how far away the library's eligibility area is.
-        score = score * exponential_decrease(1.0 * eligibility_area_distance_factor * eligibility_min_distance)
-
-        # Decrease the score based on how far away the library's focus area is.
-        score = score * exponential_decrease(1.0 * focus_area_distance_factor * focus_min_distance)
-
-        # Decrease the score based on the sum of the sizes of the library's focus areas, in km^2.
-        # This currently  assumes that the library's focus areas don't overlap, which may not be true.
-        # If a focus area is "everywhere", the size is the area of Earth (510 million km^2).
-        focus_area_size = func.sum(
-            case(
-                [(focus_areas_subquery.c.type==Place.EVERYWHERE, literal_column(str(510000000000000)))],
-                else_=func.ST_Area(focus_areas_subquery.c.geometry)
-            )
-        ) / 1000000
-        score = score * exponential_decrease(1.0 * focus_area_size_factor * focus_area_size)
-
-        # Rank the libraries by score, and remove any libraries
-        # that are below the score threshold.
-        library_id_and_score = select(
-            [libraries_collections.c.libraries_id,
-             score.label("score"),
-            ]
-        ).having(
-            score > literal_column(str(score_threshold))
-        ).where(
-            and_(
-                # Query for either the production feed or the testing feed.
-                cls._feed_restriction(
-                    production,
-                    libraries_collections.c.libraries_library_stage,
-                    libraries_collections.c.libraries_registry_stage
-                ),
-
-                # Limit to the collection summaries for the user's
-                # language. If a library has no collection for the
-                # language, it's still included.
-                or_(
-                    libraries_collections.c.collectionsummaries_language==language_code,
-                    libraries_collections.c.collectionsummaries_language==None
-                )
-            )
-        ).select_from(
-            libraries_collections
-        ).group_by(
-            libraries_collections.c.libraries_id,
-            libraries_collections.c.collectionsummaries_id,
-            libraries_collections.c.collectionsummaries_size,
-        ).order_by(
-            score.desc()
-        )
-
-        result = _db.execute(library_id_and_score)
-        library_ids_and_scores = {r[0]: r[1] for r in result}
-        # Look up the Library objects and return them with the scores.
-        libraries = _db.query(Library).filter(Library.id.in_(list(library_ids_and_scores.keys())))
-        c = Counter()
-        for library in libraries:
-            c[library] = library_ids_and_scores[library.id]
-        return c
 
     @classmethod
     def nearby(cls, _db, target, max_radius=150, production=True):
@@ -855,7 +597,7 @@ class Library(Base):
             # Filter out any libraries that show up in both lists.
             for_name = set(libraries_for_name)
             libraries_for_location = [
-                x for x in libraries_for_location if not x in for_name
+                x for x in libraries_for_location if x not in for_name
             ]
 
         # A lot of libraries list their locations only within their description, so it's worth
@@ -906,7 +648,7 @@ class Library(Base):
         alias_match = cls.fuzzy_match(PlaceAlias.name, query)
         qu = qu.filter(or_(name_match, alias_match))
         if type:
-            qu = qu.filter(named_place.type==type)
+            qu = qu.filter(named_place.type == type)
         if here:
             min_distance = func.min(func.ST_DistanceSphere(here, named_place.geometry))
             qu = qu.add_columns(min_distance)
@@ -1063,19 +805,39 @@ class Library(Base):
         if len(link) > 0:
             return link[0]
 
+
 class LibraryAlias(Base):
-
     """An alternate name for a library."""
+    ##### Class Constants ####################################################  # noqa: E266
+
+    ##### Public Interface / Magic Methods ###################################  # noqa: E266
+
+    ##### SQLAlchemy Table properties ########################################  # noqa: E266
+
     __tablename__ = 'libraryalias'
-
-    id = Column(Integer, primary_key=True)
-    library_id = Column(Integer, ForeignKey('libraries.id'), index=True)
-    name = Column(Unicode, index=True)
-    language = Column(Unicode(3), index=True)
-
     __table_args__ = (
         UniqueConstraint('library_id', 'name', 'language'),
     )
+
+    ##### SQLAlchemy non-Column components ###################################  # noqa: E266
+
+    ##### SQLAlchemy Columns #################################################  # noqa: E266
+
+    id = Column(Integer, primary_key=True)
+    name = Column(Unicode, index=True)
+    language = Column(Unicode(3), index=True)
+
+    ##### SQLAlchemy Relationships ###########################################  # noqa: E266
+
+    library_id = Column(Integer, ForeignKey('libraries.id'), index=True)
+
+    ##### SQLAlchemy Field Validation ########################################  # noqa: E266
+
+    ##### Properties and Getters/Setters #####################################  # noqa: E266
+
+    ##### Class Methods ######################################################  # noqa: E266
+
+    ##### Private Class Methods ##############################################  # noqa: E266
 
 
 class ServiceArea(Base):
@@ -1728,13 +1490,14 @@ Index("ix_collectionsummary_language_size", CollectionSummary.language, Collecti
 
 
 class Hyperlink(Base):
-    """A link between a Library and a Resource.
-
-    We trust that the Resource is actually associated with the Library
-    because the library told us about it; either directly, during
-    registration, or by putting a link in its Authentication For OPDS
-    document.
     """
+    A link between a Library and a Resource.
+
+    We trust that the Resource is actually associated with the Library because the library told us about it;
+    either directly, during registration, or by putting a link in its Authentication For OPDS document.
+    """
+    ##### Class Constants ####################################################  # noqa: E266
+
     INTEGRATION_CONTACT_REL = "http://librarysimplified.org/rel/integration-contact"
     COPYRIGHT_DESIGNATED_AGENT_REL = "http://librarysimplified.org/rel/designated-agent/copyright"
     HELP_REL = "help"
@@ -1749,170 +1512,227 @@ class Hyperlink(Base):
     # Hyperlinks with these relations are not for public consumption.
     PRIVATE_RELS = [INTEGRATION_CONTACT_REL]
 
+    ##### Public Interface / Magic Methods ###################################  # noqa: E266
+
+    def notify(self, emailer, url_for):
+        """
+        Notify the target of this hyperlink that it is, in fact, a target of the hyperlink.
+
+        If the underlying resource needs a new validation, an ADDRESS_NEEDS_CONFIRMATION email will be sent,
+        asking the person on the other end to confirm the address. Otherwise, an ADDRESS_DESIGNATED email will
+        be sent, informing the person on the other end that their (probably already validated) email address
+        was associated with another library.
+
+        :param emailer: An Emailer, for sending out the email.
+        :param url_for: An implementation of Flask's url_for, used to generate a validation link if necessary.
+        """
+        if not emailer or not url_for:  # We can't actually send any emails.
+            return
+
+        _db = Session.object_session(self)
+
+        # These shouldn't happen, but just to be safe, do nothing if this Hyperlink is disconnected from the
+        # other data model objects it needs to do its job.
+        resource = self.resource
+        library = self.library
+
+        if not resource or not library:
+            return
+
+        # Default to sending an informative email with no validation link.
+        email_type = Emailer.ADDRESS_DESIGNATED
+        to_address = resource.href
+
+        if to_address.startswith('mailto:'):
+            to_address = to_address[7:]
+
+        # Make sure there's a Validation object associated with this Resource.
+        if resource.validation is None:
+            resource.validation, is_new = create(_db, Validation)
+        else:
+            is_new = False
+
+        validation = resource.validation
+
+        if is_new or not validation.active:
+            # Either this Validation was just created or it expired before being verified. Restart the
+            # validation process and send an email that includes a validation link.
+            validation.restart()
+            email_type = Emailer.ADDRESS_NEEDS_CONFIRMATION
+
+        # Create values for all the variables expected by the default templates.
+        template_args = dict(
+            rel_desc=Hyperlink.REL_DESCRIPTIONS.get(self.rel, self.rel),
+            library=library.name,
+            library_web_url=library.web_url,
+            email=to_address,
+            registry_support=ConfigurationSetting.sitewide(_db, Configuration.REGISTRY_CONTACT_EMAIL).value,
+        )
+
+        if email_type == Emailer.ADDRESS_NEEDS_CONFIRMATION:
+            template_args['confirmation_link'] = url_for(
+                "confirm_resource", resource_id=resource.id, secret=validation.secret
+            )
+
+        body = emailer.send(email_type, to_address, **template_args)
+
+        return body
+
+    ##### SQLAlchemy Table properties ########################################  # noqa: E266
+
     __tablename__ = 'hyperlinks'
 
-    id = Column(Integer, primary_key=True)
-    rel = Column(Unicode, index=True, nullable=False)
-    library_id = Column(Integer, ForeignKey('libraries.id'), index=True)
-    resource_id = Column(Integer, ForeignKey('resources.id'), index=True)
-
-    # A Library can have multiple links with the same rel, but we only
-    # need to keep track of one.
+    # A Library can have multiple links with the same rel, but we only need to keep track of one.
     __table_args__ = (
         UniqueConstraint('library_id', 'rel'),
     )
+
+    ##### SQLAlchemy non-Column components ###################################  # noqa: E266
+
+    ##### SQLAlchemy Columns #################################################  # noqa: E266
+
+    id = Column(Integer, primary_key=True)
+    rel = Column(Unicode, index=True, nullable=False)
+
+    ##### SQLAlchemy Relationships ###########################################  # noqa: E266
+
+    library_id = Column(Integer, ForeignKey('libraries.id'), index=True)
+    resource_id = Column(Integer, ForeignKey('resources.id'), index=True)
+
+    ##### SQLAlchemy Field Validation ########################################  # noqa: E266
+
+    ##### Properties and Getters/Setters #####################################  # noqa: E266
 
     @hybrid_property
     def href(self):
         if not self.resource:
             return None
+
         return self.resource.href
 
     @href.setter
     def href(self, url):
         _db = Session.object_session(self)
-        resource, is_new = get_one_or_create(_db, Resource, href=url)
+        (resource, _) = get_one_or_create(_db, Resource, href=url)
         self.resource = resource
 
-    def notify(self, emailer, url_for):
-        """Notify the target of this hyperlink that it is, in fact,
-        a target of the hyperlink.
+    ##### Class Methods ######################################################  # noqa: E266
 
-        If the underlying resource needs a new validation, an
-        ADDRESS_NEEDS_CONFIRMATION email will be sent, asking the person on
-        the other end to confirm the address. Otherwise, an
-        ADDRESS_DESIGNATED email will be sent, informing the person on
-        the other end that their (probably already validated) email
-        address was associated with another library.
-
-        :param emailer: An Emailer, for sending out the email.
-        :param url_for: An implementation of Flask's url_for, used to
-            generate a validation link if necessary.
-        """
-        if not emailer or not url_for:
-            # We can't actually send any emails.
-            return
-        _db = Session.object_session(self)
-
-        # These shouldn't happen, but just to be safe, do nothing if
-        # this Hyperlink is disconnected from the other data model
-        # objects it needs to do its job.
-        resource = self.resource
-        library = self.library
-        if not resource or not library:
-            return
-
-        # Default to sending an informative email with no validation
-        # link.
-        email_type = Emailer.ADDRESS_DESIGNATED
-        to_address = resource.href
-        if to_address.startswith('mailto:'):
-            to_address = to_address[7:]
-        deadline = None
-
-        # Make sure there's a Validation object associated with this
-        # Resource.
-        if resource.validation is None:
-            resource.validation, is_new = create(_db, Validation)
-        else:
-            is_new = False
-        validation = resource.validation
-
-        if is_new or not validation.active:
-            # Either this Validation was just created or it expired
-            # before being verified. Restart the validation process
-            # and send an email that includes a validation link.
-            validation.restart()
-            email_type = Emailer.ADDRESS_NEEDS_CONFIRMATION
-
-        # Create values for all the variables expected by the default
-        # templates.
-        template_args = dict(
-            rel_desc = Hyperlink.REL_DESCRIPTIONS.get(self.rel, self.rel),
-            library=library.name,
-            library_web_url = library.web_url,
-            email=to_address,
-            registry_support=ConfigurationSetting.sitewide(
-                _db, Configuration.REGISTRY_CONTACT_EMAIL
-            ).value,
-        )
-        if email_type == Emailer.ADDRESS_NEEDS_CONFIRMATION:
-            template_args['confirmation_link'] = url_for(
-                "confirm_resource", resource_id=resource.id, secret=validation.secret
-            )
-        body = emailer.send(email_type, to_address, **template_args)
-        return body
+    ##### Private Class Methods ##############################################  # noqa: E266
 
 
 class Resource(Base):
-    """A URI, potentially linked to multiple libraries, or to a single
-    library through multiple relationships.
-
-    e.g. a library consortium may use a single email address as the
-    patron help address and the integration contact address for all of
-    its libraries. That address only needs to be validated once.
     """
-    __tablename__ = 'resources'
+    A URI, potentially linked to multiple libraries, or to a single library through multiple relationships.
 
-    id = Column(Integer, primary_key=True)
-    href = Column(Unicode, nullable=False, index=True, unique=True)
-    hyperlinks = relationship("Hyperlink", backref="resource")
+    e.g. a library consortium may use a single email address as the patron help address and the integration
+    contact address for all of its libraries. That address only needs to be validated once.
+    """
+    ##### Class Constants ####################################################  # noqa: E266
 
-    # Every Resource may have at most one Validation. There's no
-    # need to validate it separately for every relationship.
-    validation_id = Column(Integer, ForeignKey('validations.id'),
-                           index=True)
+    ##### Public Interface / Magic Methods ###################################  # noqa: E266
 
     def restart_validation(self):
         """Start or restart the validation process for this resource."""
         if not self.validation:
             _db = Session.object_session(self)
-            self.validation, ignore = create(_db, Validation)
+            (self.validation, _) = create(_db, Validation)
+
         self.validation.restart()
+
         return self.validation
+
+    ##### SQLAlchemy Table properties ########################################  # noqa: E266
+
+    __tablename__ = 'resources'
+
+    ##### SQLAlchemy non-Column components ###################################  # noqa: E266
+
+    ##### SQLAlchemy Columns #################################################  # noqa: E266
+
+    id = Column(Integer, primary_key=True)
+    href = Column(Unicode, nullable=False, index=True, unique=True)
+
+    ##### SQLAlchemy Relationships ###########################################  # noqa: E266
+
+    hyperlinks = relationship("Hyperlink", backref="resource")
+
+    # Every Resource may have at most one Validation. There's no need to validate it separately for every relationship.
+    validation_id = Column(Integer, ForeignKey('validations.id'), index=True)
+
+    ##### SQLAlchemy Field Validation ########################################  # noqa: E266
+
+    ##### Properties and Getters/Setters #####################################  # noqa: E266
+
+    ##### Class Methods ######################################################  # noqa: E266
+
+    ##### Private Class Methods ##############################################  # noqa: E266
 
 
 class Validation(Base):
-    """An attempt (successful, in-progress, or failed) to validate a
-    Resource.
-    """
-    __tablename__ = 'validations'
+    """An attempt (successful, in-progress, or failed) to validate a Resource."""
 
-    EXPIRES_AFTER = datetime.timedelta(days=1)
-
-    id = Column(Integer, primary_key=True)
-    success = Column(Boolean, index=True, default=False)
-    started_at = Column(DateTime, index=True, nullable=False,
-                        default = lambda x: datetime.datetime.utcnow())
+    ##### Class Constants ####################################################  # noqa: E266
 
     # Used in OPDS catalogs to convey the status of a validation attempt.
     STATUS_PROPERTY = "https://schema.org/reservationStatus"
 
-    # These constants are used in OPDS catalogs as values of
-    # schema:reservationStatus.
+    # These constants are used in OPDS catalogs as values of schema:reservationStatus.
     CONFIRMED = "https://schema.org/ReservationConfirmed"
     IN_PROGRESS = "https://schema.org/ReservationPending"
     INACTIVE = "https://schema.org/ReservationCancelled"
 
-    # The only way to validate a Resource is to prove you know the
-    # corresponding secret.
-    secret = Column(Unicode, default=generate_secret, unique=True)
+    EXPIRES_AFTER = timedelta(days=1)
 
-    resource = relationship(
-        "Resource", backref=backref("validation", uselist=False), uselist=False
-    )
-
+    ##### Public Interface / Magic Methods ###################################  # noqa: E266
 
     def restart(self):
-        """Start a new validation attempt, cancelling any previous attempt.
-
-        This does not send out a validation email -- that needs to be
-        handled separately by something capable of generating the URL
-        to the validation controller.
         """
-        self.started_at = datetime.datetime.utcnow()
+        Start a new validation attempt, cancelling any previous attempt.
+
+        This does not send out a validation email -- that needs to be handled separately by something
+        capable of generating the URL to the validation controller.
+        """
+        self.started_at = datetime.utcnow()
         self.secret = generate_secret()
         self.success = False
+
+    def mark_as_successful(self):
+        """Register the fact that the validation attempt has succeeded."""
+        if self.success:
+            raise Exception("This validation has already succeeded.")
+
+        if not self.active:
+            raise Exception("This validation has expired.")
+
+        self.secret = None
+        self.success = True
+
+        # TODO: This may cause one or more libraries to switch from
+        # "not completely validated" to "completely validated".
+
+    ##### SQLAlchemy Table properties ########################################  # noqa: E266
+
+    __tablename__ = 'validations'
+
+    ##### SQLAlchemy non-Column components ###################################  # noqa: E266
+
+    ##### SQLAlchemy Columns #################################################  # noqa: E266
+
+    id = Column(Integer, primary_key=True)
+    success = Column(Boolean, index=True, default=False)
+    started_at = Column(DateTime, index=True, nullable=False, default=datetime.utcnow)
+
+    # The only way to validate a Resource is to prove you know the corresponding secret.
+    secret = Column(Unicode, default=generate_secret, unique=True)
+
+    ##### SQLAlchemy Relationships ###########################################  # noqa: E266
+
+    resource = relationship("Resource", backref=backref("validation", uselist=False), uselist=False)
+
+    ##### SQLAlchemy Field Validation ########################################  # noqa: E266
+
+    ##### Properties and Getters/Setters #####################################  # noqa: E266
 
     @property
     def deadline(self):
@@ -1922,25 +1742,17 @@ class Validation(Base):
 
     @property
     def active(self):
-        """Is this Validation still active?
-
-        An inactive Validation can't be marked as successful -- it
-        needs to be reset.
         """
-        now = datetime.datetime.utcnow()
+        Is this Validation still active?
+
+        An inactive Validation can't be marked as successful -- it needs to be reset.
+        """
+        now = datetime.utcnow()
         return not self.success and now < self.deadline
 
-    def mark_as_successful(self):
-        """Register the fact that the validation attempt has succeeded."""
-        if self.success:
-            raise Exception("This validation has already succeeded.")
-        if not self.active:
-            raise Exception("This validation has expired.")
-        self.secret = None
-        self.success = True
+    ##### Class Methods ######################################################  # noqa: E266
 
-        # TODO: This may cause one or more libraries to switch from
-        # "not completely validated" to "completely validated".
+    ##### Private Class Methods ##############################################  # noqa: E266
 
 
 class DelegatedPatronIdentifier(Base):
@@ -2458,16 +2270,10 @@ class ConfigurationSetting(Base):
 
 libraries_audiences = Table(
     'libraries_audiences', Base.metadata,
-     Column(
-         'library_id', Integer, ForeignKey('libraries.id'),
-         index=True, nullable=False
-     ),
-     Column(
-         'audience_id', Integer, ForeignKey('audiences.id'),
-         index=True, nullable=False
-     ),
-     UniqueConstraint('library_id', 'audience_id'),
- )
+    Column('library_id', Integer, ForeignKey('libraries.id'), index=True, nullable=False),
+    Column('audience_id', Integer, ForeignKey('audiences.id'), index=True, nullable=False),
+    UniqueConstraint('library_id', 'audience_id'),
+)
 
 
 class Admin(Base):

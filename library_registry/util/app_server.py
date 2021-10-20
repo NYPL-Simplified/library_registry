@@ -2,22 +2,22 @@
 import logging
 import sys
 import traceback
-from functools import wraps
 
-from psycopg2 import DatabaseError
 import flask
-
 from lxml import etree
+from psycopg2 import DatabaseError
+from psycopg2.extensions import adapt as sqlescape
 from flask import make_response
-from flask_babel import lazy_gettext as _
+from flask_babel import lazy_gettext as lgt
+from sqlalchemy.sql import compiler
 
-from library_registry.util.problem_detail import ProblemDetail
 from library_registry.opds import OPDSCatalog
 
 
 def catalog_response(catalog, cache_for=OPDSCatalog.CACHE_TIME):
     content_type = OPDSCatalog.OPDS_TYPE
     return _make_response(catalog, content_type, cache_for)
+
 
 def _make_response(content, content_type, cache_for):
     if isinstance(content, etree._Element):
@@ -38,27 +38,8 @@ def _make_response(content, content_type, cache_for):
     return make_response(content, 200, {"Content-Type": content_type,
                                         "Cache-Control": cache_control})
 
-def returns_problem_detail(f):
-    @wraps(f)
-    def decorated(*args, **kwargs):
-        v = f(*args, **kwargs)
-        if isinstance(v, ProblemDetail):
-            return v.response
-        return v
-    return decorated
 
-def returns_json_or_response_or_problem_detail(f):
-    @wraps(f)
-    def decorated(*args, **kwargs):
-        v = f(*args, **kwargs)
-        if isinstance(v, ProblemDetail):
-            return v.response
-        if isinstance(v, flask.Response):
-            return v
-        return flask.jsonify(**v)
-    return decorated
-
-class ErrorHandler(object):
+class ErrorHandler:
     def __init__(self, app, debug):
         self.app = app
         self.debug = debug
@@ -113,14 +94,31 @@ class ErrorHandler(object):
             if self.debug:
                 body = tb
             else:
-                body = _('An internal error occured')
+                body = lgt('An internal error occured')
             response = make_response(str(body), 500, {"Content-Type": "text/plain"})
 
         log_method("Exception in web app: %s", exception, exc_info=exception)
         return response
 
 
-class HeartbeatController(object):
+class HeartbeatController:
 
     def heartbeat(self):
         return make_response("", 200, {"Content-Type": "application/json"})
+
+
+def dump_query(query):
+    dialect = query.session.bind.dialect
+    statement = query.statement
+    comp = compiler.SQLCompiler(dialect, statement)
+    comp.compile()
+    enc = dialect.encoding
+    params = {}
+
+    for (k, v) in comp.params.items():
+        if isinstance(v, str):
+            v = v.encode(enc)
+
+        params[k] = sqlescape(v)
+
+    return (comp.string.encode(enc) % params).decode(enc)
