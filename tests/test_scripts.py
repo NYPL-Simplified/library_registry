@@ -28,11 +28,18 @@ from library_registry.scripts import (
     SetCoverageAreaScript,
     ShowIntegrationsScript,
 )
-from testing import MockPlace
+
+from .mocks import MockPlace
 
 
 class TestLibraryScript:
+    @pytest.mark.needsdocstring
     def test_libraries(self, db_session, create_test_library, destroy_test_library):
+        """
+        GIVEN:
+        WHEN:
+        THEN:
+        """
         library = create_test_library(db_session, library_name="The Library")
         ignored = create_test_library(db_session, library_name="Ignored Library")
 
@@ -61,7 +68,13 @@ class TestLibraryScript:
         for library_object in [library, ignored]:
             destroy_test_library(db_session, library_object)
 
+    @pytest.mark.needsdocstring
     def test_all_libraries(self, db_session, create_test_library, destroy_test_library):
+        """
+        GIVEN:
+        WHEN:
+        THEN:
+        """
         # Three libraries, one in each state.
         production = create_test_library(db_session)
         testing = create_test_library(db_session, library_stage=Library.TESTING_STAGE)
@@ -77,7 +90,13 @@ class TestLibraryScript:
 
 class TestLoadPlacesScript:
 
+    @pytest.mark.needsdocstring
     def test_run(self, db_session):
+        """
+        GIVEN:
+        WHEN:
+        THEN:
+        """
         test_ndjson_lines = [
             '{"parent_id": null, "name": "United States", "full_name": null, "aliases": [], "type": "nation", "abbreviated_name": "US", "id": "US"}',   # noqa: E501
             '{"type": "Point", "coordinates": [-159.459551, 54.948652]}',
@@ -102,7 +121,13 @@ class TestLoadPlacesScript:
 
 class TestSearchPlacesScript:
 
+    @pytest.mark.needsdocstring
     def test_run(self, db_session, new_york_state, connecticut_state, new_york_city):
+        """
+        GIVEN:
+        WHEN:
+        THEN:
+        """
         nys = new_york_state
         nyc = new_york_city
 
@@ -119,8 +144,13 @@ class TestSearchPlacesScript:
 
 
 class TestAddLibraryScript:
-
+    @pytest.mark.needsdocstring
     def test_run(self, db_session, new_york_city):
+        """
+        GIVEN:
+        WHEN:
+        THEN:
+        """
         nyc = new_york_city
         args = [
             '--name=The New York Public Library',
@@ -177,7 +207,13 @@ class TestSearchLibraryScript:
 
 
 class TestConfigureSiteScript:
+    @pytest.mark.needsdocstring
     def test_settings(self, db_session):
+        """
+        GIVEN:
+        WHEN:
+        THEN:
+        """
         script = ConfigureSiteScript()
         output = StringIO()
         script.do_run(
@@ -211,12 +247,24 @@ class TestConfigureSiteScript:
 
 
 class TestShowIntegrationsScript:
+    @pytest.mark.needsdocstring
     def test_with_no_integrations(self, db_session):
+        """
+        GIVEN:
+        WHEN:
+        THEN:
+        """
         output = StringIO()
         ShowIntegrationsScript().do_run(db_session, output=output)
         assert output.getvalue() == "No integrations found.\n"
 
+    @pytest.mark.needsdocstring
     def test_with_multiple_integrations(self, db_session):
+        """
+        GIVEN:
+        WHEN:
+        THEN:
+        """
         (i1, _) = create(db_session, ExternalIntegration, name="Integration 1",
                          goal="Goal", protocol=ExternalIntegration.ADOBE_VENDOR_ID)
         (i2, _) = create(db_session, ExternalIntegration, name="Integration 2",
@@ -248,7 +296,13 @@ class TestShowIntegrationsScript:
 
 
 class TestConfigureIntegrationScript:
+    @pytest.mark.needsdocstring
     def test_load_integration(self, db_session):
+        """
+        GIVEN:
+        WHEN:
+        THEN:
+        """
         m = ConfigureIntegrationScript._integration
 
         with pytest.raises(ValueError) as exc:
@@ -286,7 +340,13 @@ class TestConfigureIntegrationScript:
         db_session.delete(integration2)
         db_session.commit()
 
+    @pytest.mark.needsdocstring
     def test_add_settings(self, db_session):
+        """
+        GIVEN:
+        WHEN:
+        THEN:
+        """
         script = ConfigureIntegrationScript()
         output = StringIO()
 
@@ -308,11 +368,15 @@ class TestConfigureIntegrationScript:
 
 
 class TestRegistrationRefreshScript:
-
+    @pytest.mark.needsdocstring
     def test_run(self, db_session, create_test_library, destroy_test_library):
         """
         Verify that run() instantiates a LibraryRegistrar using .registrar, then calls its
         reregister() method on every library that it's been asked to handle.
+
+        GIVEN:
+        WHEN:
+        THEN:
         """
         success_library = create_test_library(db_session, library_name="Success")
         failure_library = create_test_library(db_session, library_name="Failure")
@@ -365,9 +429,14 @@ class TestRegistrationRefreshScript:
         for library_obj in [success_library, failure_library]:
             destroy_test_library(db_session, library_obj)
 
+    @pytest.mark.needsdocstring
     def test_registrar(self, db_session):
         """
         Verify that the normal, non-mocked value of script.registrar is a LibraryRegistrar.
+
+        GIVEN:
+        WHEN:
+        THEN:
         """
         script = RegistrationRefreshScript(db_session)
         registrar = script.registrar
@@ -376,7 +445,13 @@ class TestRegistrationRefreshScript:
 
 
 class TestSetCoverageAreaScript:
+    @pytest.mark.needsdocstring
     def test_argument_parsing(self, db_session, create_test_library, destroy_test_library):
+        """
+        GIVEN:
+        WHEN:
+        THEN:
+        """
         library = create_test_library(db_session)
         s = SetCoverageAreaScript(_db=db_session)
 
@@ -384,7 +459,13 @@ class TestSetCoverageAreaScript:
         s.run(["--library=%s" % library.name], place_class=MockPlace)
         destroy_test_library(db_session, library)
 
+    @pytest.mark.needsdocstring
     def test_unrecognized_place(self, db_session, create_test_library, destroy_test_library):
+        """
+        GIVEN:
+        WHEN:
+        THEN:
+        """
         library = create_test_library(db_session)
         s = SetCoverageAreaScript(_db=db_session)
         for arg in ['service-area', 'focus-area']:
@@ -397,8 +478,13 @@ class TestSetCoverageAreaScript:
 
         destroy_test_library(db_session, library)
 
+    @pytest.mark.needsdocstring
     def test_ambiguous_place(self, db_session, create_test_library, destroy_test_library):
-
+        """
+        GIVEN:
+        WHEN:
+        THEN:
+        """
         MockPlace.by_name["OO"] = MockPlace.AMBIGUOUS
 
         library = create_test_library(db_session)
@@ -411,7 +497,15 @@ class TestSetCoverageAreaScript:
         MockPlace.by_name = {}
         destroy_test_library(db_session, library)
 
-    def test_success(self, db_session, create_test_library, create_test_place, destroy_test_library):
+    @pytest.mark.needsdocstring
+    def test_success(
+        self, db_session, create_test_library, create_test_place, destroy_test_library
+    ):
+        """
+        GIVEN:
+        WHEN:
+        THEN:
+        """
         us = create_test_place(db_session, place_type=Place.NATION, abbreviated_name='US')
         library = create_test_library(db_session)
         s = SetCoverageAreaScript(_db=db_session)
@@ -447,13 +541,23 @@ class TestSetCoverageAreaScript:
 
         for setting_obj in db_session.query(ConfigurationSetting).all():
             db_session.delete(setting_obj)
+
+        for place_obj in db_session.query(Place).all():
+            db_session.delete(place_obj)
+
         db_session.commit()
 
         destroy_test_library(db_session, library)
 
 
 class TestConfigureEmailerScript:
+    @pytest.mark.needsdocstring
     def test_run(self, db_session):
+        """
+        GIVEN:
+        WHEN:
+        THEN:
+        """
         class Mock(Emailer):
             sent = None
 
@@ -496,7 +600,13 @@ class TestConfigureEmailerScript:
 
 
 class TestConfigureVendorIDScript:
+    @pytest.mark.needsdocstring
     def test_run(self, db_session):
+        """
+        GIVEN:
+        WHEN:
+        THEN:
+        """
         cmd_args = [
             "--vendor-id=LIBR",
             "--node-value=abc12",

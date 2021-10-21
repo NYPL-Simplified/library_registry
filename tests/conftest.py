@@ -36,24 +36,6 @@ def pytest_configure(config):
     )
 
 
-# The following two functions work together to let you detect which tests are
-# leaving artifacts in the database. However, they spit out a lot of extra per-test
-# console output, so only uncomment them if you need the functionality, and never
-# leave them uncommented when committing.
-
-# def pytest_report_teststatus(report, config):
-#     return report.outcome, "", report.outcome.upper()
-#
-#
-# @pytest.fixture(autouse=True, scope="function")
-# def how_many_config_settings(db_session, capsys):
-#     yield 1       # this makes the next bit happen *after* the test body
-#     count = db_session.query(ConfigurationSetting).count()
-#     test_name = os.environ.get('PYTEST_CURRENT_TEST')
-#     with capsys.disabled():
-#         print(f"### CS COUNT after {test_name}: {count}")
-
-
 @pytest.fixture(autouse=True, scope="session")
 def init_test_db():
     """For a given testing session, pave and re-initialize the database"""
@@ -87,9 +69,10 @@ def setup_test_adobe_integration(init_test_db):
         integration.setting(Configuration.ADOBE_VENDOR_ID_NODE_VALUE).value = "0x685b35c00f05"
         session.flush()
         session.close()
+    engine.dispose()
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def app():
     app = create_app(testing=True)
     app.secret_key = "SUPER SECRET TESTING SECRET"
@@ -103,9 +86,15 @@ def client(app):
 
 
 @pytest.fixture
-def db_session(app):
+def db_engine(app):
     engine = create_engine(test_db_url)
-    with engine.connect() as connection:
+    yield engine
+    engine.dispose()
+
+
+@pytest.fixture
+def db_session(db_engine):
+    with db_engine.connect() as connection:
         session = Session(connection)
         yield session
         session.close()

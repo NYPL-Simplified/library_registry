@@ -138,8 +138,8 @@ class BaseController:
         request.library = library
         return library
 
-# This static_file function is used only when
-# the app is running locally *without* Docker.
+
+# This static_file function is used only when the app is running locally *without* Docker.
 # In all other cases, nginx serves the static files (see docker/nginx.conf).
 class StaticFileController(BaseController):
     def static_file(self, directory, filename):
