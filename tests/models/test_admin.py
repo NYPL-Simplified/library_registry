@@ -1,6 +1,7 @@
 """
 Tests for the Admin model.
 """
+import pytest       # noqa: F401
 from flask_bcrypt import check_password_hash
 
 from library_registry.model import Admin

@@ -1,7 +1,8 @@
 from io import StringIO
 
+import pytest       # noqa: F401
 from sqlalchemy import func
-from geoalchemy2 import Geography
+
 from library_registry.model import (
     Place,
     PlaceAlias,

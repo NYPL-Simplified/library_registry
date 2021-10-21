@@ -1,6 +1,8 @@
 """
 Tests for the ExternalIntegration model.
 """
+import pytest       # noqa: F401
+
 from library_registry.model import ConfigurationSetting, ExternalIntegration
 
 

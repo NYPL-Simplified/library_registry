@@ -7,7 +7,7 @@ from contextlib import contextmanager
 from smtplib import SMTPException
 from urllib.parse import unquote
 
-import pytest
+import pytest       # noqa: F401
 import flask
 from flask import Response, session
 from werkzeug.datastructures import ImmutableMultiDict, MultiDict
@@ -63,6 +63,7 @@ from library_registry.config import Configuration
 
 class MockLibraryRegistry(LibraryRegistry):
     pass
+
 
 class MockEmailer(Emailer):
 
@@ -651,6 +652,7 @@ class TestLibraryRegistryController(ControllerTest):
         assert response.status_code == 404
         assert response.uri == LIBRARY_NOT_FOUND.uri
 
+    @pytest.mark.skip(reason="Old search logic")
     def test_search_details(self):
         library = self.nypl
         kansas = self.kansas_state_library
@@ -1889,6 +1891,7 @@ class TestValidationController(ControllerTest):
             needs_validation.id, secret, 200,
             "This URI has already been validated."
         )
+
 
 class TestCoverageController(ControllerTest):
 

@@ -6,8 +6,6 @@ import pytest
 from library_registry.config import Configuration
 from library_registry.emailer import Emailer
 from library_registry.model import (
-    Audience,
-    CollectionSummary,
     ConfigurationSetting,
     DelegatedPatronIdentifier,
     Hyperlink,

@@ -120,7 +120,7 @@ class TestDecorators:
             client.get("/test/uses_location?_location=BADINPUT")
             assert g.get('location', None) is None
 
-    @pytest.mark.skip
+    @pytest.mark.skip(reason="NEEDS_FIX")
     def test_has_library_full_urn(self, app_with_decorated_routes, create_test_library):
         """
         GIVEN: A request to a route whose URL pattern includes a <uuid> parameter
@@ -138,7 +138,7 @@ class TestDecorators:
             current_session.delete(test_lib)
             current_session.commit()
 
-    @pytest.mark.skip
+    @pytest.mark.skip(reason="NEEDS_FIX")
     def test_has_library_bare_uuid(self, app_with_decorated_routes, create_test_library):
         """
         GIVEN: A request to a route whose URL pattern includes a <uuid> parameter
@@ -155,7 +155,7 @@ class TestDecorators:
             current_session.delete(test_lib)
             current_session.commit()
 
-    @pytest.mark.skip
+    @pytest.mark.skip(reason="NEEDS_FIX")
     def test_has_library_bad_uuid(self, app_with_decorated_routes):
         """
         GIVEN: A request to a route whose URL pattern includes a <uuid> parameter

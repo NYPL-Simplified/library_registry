@@ -1,12 +1,8 @@
 from collections import defaultdict
-import json
 
-from sqlalchemy.orm.exc import (
-    MultipleResultsFound,
-    NoResultFound,
-)
+import pytest       # noqa: F401
+
 from library_registry.authentication_document import AuthenticationDocument
-from . import DatabaseTest
 from library_registry.model import (
     Audience,
     Place,
@@ -15,9 +11,11 @@ from library_registry.model import (
 from library_registry.util.problem_detail import ProblemDetail
 from library_registry.problem_details import INVALID_INTEGRATION_DOCUMENT
 from testing import MockPlace
+from . import DatabaseTest
 
 # Alias for a long class name
 AuthDoc = AuthenticationDocument
+
 
 class TestParseCoverage(DatabaseTest):
 

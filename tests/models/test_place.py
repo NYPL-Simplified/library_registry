@@ -63,6 +63,8 @@ class TestPlaceModel:
         setting = ConfigurationSetting.sitewide(db_session, Configuration.DEFAULT_NATION_ABBREVIATION)
         assert setting.value is None
         assert Place.default_nation(db_session) is None
+        db_session.delete(setting)
+        db_session.commit()
 
     def test_default_nation_set(self, db_session, places, app):
         """
@@ -75,6 +77,8 @@ class TestPlaceModel:
         default_nation_place = Place.default_nation(db_session)
         assert isinstance(default_nation_place, Place)
         assert default_nation_place.abbreviated_name == places["crude_us"].abbreviated_name
+        db_session.delete(setting)
+        db_session.commit()
 
     def test_distances_from_point(self, db_session, places, capsys):
         """

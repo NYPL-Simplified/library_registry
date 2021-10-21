@@ -1223,7 +1223,8 @@ class Place(Base):
 
     @classmethod
     def default_nation(cls, _db):
-        """Return the default nation for this library registry.
+        """
+        Return the default nation for this library registry.
 
         If an incoming coverage area doesn't mention a nation, we'll assume it's within this nation.
 
@@ -1231,10 +1232,13 @@ class Place(Base):
         """
         default_nation = None
         abbreviation = ConfigurationSetting.sitewide(_db, Configuration.DEFAULT_NATION_ABBREVIATION).value
+
         if abbreviation:
             default_nation = get_one(_db, Place, type=Place.NATION, abbreviated_name=abbreviation)
+
             if not default_nation:
                 logging.error(f"Could not look up default nation {abbreviation}")
+
         return default_nation
 
     @classmethod

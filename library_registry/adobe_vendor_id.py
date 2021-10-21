@@ -14,6 +14,10 @@ class AdobeVendorIDController:
     Flask controllers that implement the Account Service and Authorization Service
     portions of the Adobe Vendor ID protocol.
     """
+    ##### Class Constants ####################################################  # noqa: E266
+
+    ##### Public Interface / Magic Methods ###################################  # noqa: E266
+
     def __init__(self, _db, vendor_id, node_value, delegates=None):
         """Constructor.
 
@@ -51,10 +55,21 @@ class AdobeVendorIDController:
     def status_handler(self):
         return Response("UP", 200, {"Content-Type": "text/plain"})
 
+    ##### Private Methods ####################################################  # noqa: E266
+
+    ##### Properties and Getters/Setters #####################################  # noqa: E266
+
+    ##### Class Methods ######################################################  # noqa: E266
+
+    ##### Private Class Methods ##############################################  # noqa: E266
+
 
 class AdobeRequestParser(XMLParser):
+    ##### Class Constants ####################################################  # noqa: E266
 
     NAMESPACES = {"adept": "http://ns.adobe.com/adept"}
+
+    ##### Public Interface / Magic Methods ###################################  # noqa: E266
 
     def process(self, data):
         requests = list(self.process_all(data, self.REQUEST_XPATH, self.NAMESPACES))
@@ -63,6 +78,8 @@ class AdobeRequestParser(XMLParser):
             return None
 
         return requests[0]  # Return only the first request tag, even if there are multiple
+
+    ##### Private Methods ####################################################  # noqa: E266
 
     def _add(self, d, tag, key, namespaces, transform=None):
         v = self._xpath1(tag, 'adept:' + key, namespaces)
@@ -76,11 +93,21 @@ class AdobeRequestParser(XMLParser):
 
         d[key] = v
 
+    ##### Properties and Getters/Setters #####################################  # noqa: E266
+
+    ##### Class Methods ######################################################  # noqa: E266
+
+    ##### Private Class Methods ##############################################  # noqa: E266
+
 
 class AdobeSignInRequestParser(AdobeRequestParser):
+    ##### Class Constants ####################################################  # noqa: E266
+
     REQUEST_XPATH = "/adept:signInRequest"
     STANDARD = 'standard'
     AUTH_DATA = 'authData'
+
+    ##### Public Interface / Magic Methods ###################################  # noqa: E266
 
     def process_one(self, tag, namespaces):
         method = tag.attrib.get('method')
@@ -100,15 +127,35 @@ class AdobeSignInRequestParser(AdobeRequestParser):
 
         return data
 
+    ##### Private Methods ####################################################  # noqa: E266
+
+    ##### Properties and Getters/Setters #####################################  # noqa: E266
+
+    ##### Class Methods ######################################################  # noqa: E266
+
+    ##### Private Class Methods ##############################################  # noqa: E266
+
 
 class AdobeAccountInfoRequestParser(AdobeRequestParser):
+    ##### Class Constants ####################################################  # noqa: E266
+
     REQUEST_XPATH = "/adept:accountInfoRequest"
+
+    ##### Public Interface / Magic Methods ###################################  # noqa: E266
 
     def process_one(self, tag, namespaces):
         method = tag.attrib.get('method')
         data = dict(method=method)
         self._add(data, tag, 'user', namespaces)
         return data
+
+    ##### Private Methods ####################################################  # noqa: E266
+
+    ##### Properties and Getters/Setters #####################################  # noqa: E266
+
+    ##### Class Methods ######################################################  # noqa: E266
+
+    ##### Private Class Methods ##############################################  # noqa: E266
 
 
 class AdobeVendorIDRequestHandler:
@@ -194,6 +241,9 @@ class AdobeVendorIDRequestHandler:
 
 class AdobeVendorIDModel:
     """Implement Adobe Vendor ID within the library registry's database model"""
+    ##### Class Constants ####################################################  # noqa: E266
+
+    ##### Public Interface / Magic Methods ###################################  # noqa: E266
 
     def __init__(self, _db, node_value, delegates):
         self._db = _db
@@ -270,6 +320,14 @@ class AdobeVendorIDModel:
         """We have no information about patrons, so labels are sparse."""
         return f"Delegated account ID {urn}"
 
+    ##### Private Methods ####################################################  # noqa: E266
+
+    ##### Properties and Getters/Setters #####################################  # noqa: E266
+
+    ##### Class Methods ######################################################  # noqa: E266
+
+    ##### Private Class Methods ##############################################  # noqa: E266
+
 
 class VendorIDAuthenticationError(Exception):
     """The Vendor ID service is working properly but returned an error."""
@@ -289,23 +347,32 @@ class AdobeVendorIDClient:
     implementation to a library registry. You can delegate to another Vendor ID implementation the
     validation of any credentials that cannot be validated through the library registry.
     """
+    ##### Class Constants ####################################################  # noqa: E266
 
-    SIGNIN_AUTHDATA_BODY = """<signInRequest method="authData" xmlns="http://ns.adobe.com/adept">
-<authData>%s</authData>
-</signInRequest>"""
+    SIGNIN_AUTHDATA_BODY = (
+        '<signInRequest method="authData" xmlns="http://ns.adobe.com/adept">'
+        '<authData>%s</authData>'
+        '</signInRequest>'
+    )
 
-    SIGNIN_STANDARD_BODY = """<signInRequest method="standard" xmlns="http://ns.adobe.com/adept">
-<username>%s</username>
-<password>%s</password>
-</signInRequest>"""
+    SIGNIN_STANDARD_BODY = (
+        '<signInRequest method="standard" xmlns="http://ns.adobe.com/adept">'
+        '<username>%s</username>'
+        '<password>%s</password>'
+        '</signInRequest>'
+    )
 
-    USER_INFO_BODY = """<accountInfoRequest method="standard" xmlns="http://ns.adobe.com/adept">
-<user>%s</user>
-</accountInfoRequest>"""
+    USER_INFO_BODY = (
+        '<accountInfoRequest method="standard" xmlns="http://ns.adobe.com/adept">'
+        '<user>%s</user>'
+        '</accountInfoRequest>'
+    )
 
     USER_IDENTIFIER_RE = re.compile("<user>([^<]+)</user>")
     LABEL_RE = re.compile("<label>([^<]+)</label>")
     ERROR_RE = re.compile('<error [^<]+ data="([^<]+)"')
+
+    ##### Public Interface / Magic Methods ###################################  # noqa: E266
 
     def __init__(self, base_url):
         self.base_url = base_url
@@ -363,6 +430,8 @@ class AdobeVendorIDClient:
         if error:
             raise VendorIDAuthenticationError(error)
 
+    ##### Private Methods ####################################################  # noqa: E266
+
     def _extract_by_re(self, content, re):
         match = re.search(content)
         if not match:
@@ -379,3 +448,9 @@ class AdobeVendorIDClient:
             raise VendorIDServerException("Unexpected response: %s" % content)
 
         return identifier, label, content
+
+    ##### Properties and Getters/Setters #####################################  # noqa: E266
+
+    ##### Class Methods ######################################################  # noqa: E266
+
+    ##### Private Class Methods ##############################################  # noqa: E266

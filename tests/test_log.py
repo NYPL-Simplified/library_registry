@@ -104,6 +104,9 @@ class TestLogConfiguration:
         assert database_log_level == LogConfiguration.WARN
         assert handler.formatter._fmt == LogConfiguration.DEFAULT_MESSAGE_TEMPLATE
 
+        db_session.delete(internal)
+        db_session.commit()
+
     def test__defaults(self):
         # Normally the default log level is INFO and log messages are emitted in JSON format.
         assert LogConfiguration._defaults(testing=False) == (

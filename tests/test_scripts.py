@@ -32,14 +32,12 @@ from testing import MockPlace
 
 
 class TestLibraryScript:
-    def test_libraries(self, db_session, create_test_library):
-
+    def test_libraries(self, db_session, create_test_library, destroy_test_library):
         library = create_test_library(db_session, library_name="The Library")
         ignored = create_test_library(db_session, library_name="Ignored Library")
 
         class Mock(LibraryScript):
-            # Mock of LibraryScript that returns a special value when all_libraries is called.
-
+            """Mock of LibraryScript that returns a special value when all_libraries is called."""
             all_libraries_return_value = object()
 
             @property
@@ -60,11 +58,10 @@ class TestLibraryScript:
         # If no library is identified by name, the output of all_libraries is used as the list of libraries.
         assert script.libraries() == script.all_libraries_return_value
 
-        db_session.delete(library)
-        db_session.delete(ignored)
-        db_session.commit()
+        for library_object in [library, ignored]:
+            destroy_test_library(db_session, library_object)
 
-    def test_all_libraries(self, db_session, create_test_library):
+    def test_all_libraries(self, db_session, create_test_library, destroy_test_library):
         # Three libraries, one in each state.
         production = create_test_library(db_session)
         testing = create_test_library(db_session, library_stage=Library.TESTING_STAGE)
@@ -74,9 +71,8 @@ class TestLibraryScript:
         script = LibraryScript(db_session)
         assert set(script.all_libraries) == set([production, testing])
 
-        for db_item in (production, testing, cancelled):
-            db_session.delete(db_item)
-        db_session.commit()
+        for library_obj in (production, testing, cancelled):
+            destroy_test_library(db_session, library_obj)
 
 
 class TestLoadPlacesScript:
@@ -209,6 +205,10 @@ class TestConfigureSiteScript:
         assert "setting1='value1'" in actual
         assert """setting2='[1,2,"3"]'""" in actual
 
+        for setting_obj in db_session.query(ConfigurationSetting).all():
+            db_session.delete(setting_obj)
+        db_session.commit()
+
 
 class TestShowIntegrationsScript:
     def test_with_no_integrations(self, db_session):
@@ -298,10 +298,18 @@ class TestConfigureIntegrationScript:
         expect_output = "Configuration settings stored.\n" + "\n".join(integration.explain()) + "\n"
         assert output.getvalue() == expect_output
 
+        for setting_obj in db_session.query(ConfigurationSetting).all():
+            db_session.delete(setting_obj)
+
+        for integration_obj in db_session.query(ExternalIntegration).all():
+            db_session.delete(integration_obj)
+
+        db_session.commit()
+
 
 class TestRegistrationRefreshScript:
 
-    def test_run(self, db_session, create_test_library):
+    def test_run(self, db_session, create_test_library, destroy_test_library):
         """
         Verify that run() instantiates a LibraryRegistrar using .registrar, then calls its
         reregister() method on every library that it's been asked to handle.
@@ -354,9 +362,8 @@ class TestRegistrationRefreshScript:
         script.run(cmd_args=["--library=Library1"])
         assert script.libraries_called_with == "Library1"
 
-        db_session.delete(success_library)
-        db_session.delete(failure_library)
-        db_session.commit()
+        for library_obj in [success_library, failure_library]:
+            destroy_test_library(db_session, library_obj)
 
     def test_registrar(self, db_session):
         """
@@ -369,16 +376,15 @@ class TestRegistrationRefreshScript:
 
 
 class TestSetCoverageAreaScript:
-    def test_argument_parsing(self, db_session, create_test_library):
+    def test_argument_parsing(self, db_session, create_test_library, destroy_test_library):
         library = create_test_library(db_session)
         s = SetCoverageAreaScript(_db=db_session)
 
         # You can run the script without specifying any areas, to see a library's current areas.
         s.run(["--library=%s" % library.name], place_class=MockPlace)
-        db_session.delete(library)
-        db_session.commit()
+        destroy_test_library(db_session, library)
 
-    def test_unrecognized_place(self, db_session, create_test_library):
+    def test_unrecognized_place(self, db_session, create_test_library, destroy_test_library):
         library = create_test_library(db_session)
         s = SetCoverageAreaScript(_db=db_session)
         for arg in ['service-area', 'focus-area']:
@@ -389,10 +395,9 @@ class TestSetCoverageAreaScript:
 
             assert "Unknown places:" in str(exc.value)
 
-        db_session.delete(library)
-        db_session.commit()
+        destroy_test_library(db_session, library)
 
-    def test_ambiguous_place(self, db_session, create_test_library):
+    def test_ambiguous_place(self, db_session, create_test_library, destroy_test_library):
 
         MockPlace.by_name["OO"] = MockPlace.AMBIGUOUS
 
@@ -404,10 +409,9 @@ class TestSetCoverageAreaScript:
                 s.run(args, place_class=MockPlace)
             assert "Ambiguous places:" in str(exc.value)
         MockPlace.by_name = {}
-        db_session.delete(library)
-        db_session.commit()
+        destroy_test_library(db_session, library)
 
-    def test_success(self, db_session, create_test_library, create_test_place):
+    def test_success(self, db_session, create_test_library, create_test_place, destroy_test_library):
         us = create_test_place(db_session, place_type=Place.NATION, abbreviated_name='US')
         library = create_test_library(db_session)
         s = SetCoverageAreaScript(_db=db_session)
@@ -441,9 +445,11 @@ class TestSetCoverageAreaScript:
         [area] = library.service_areas
         assert area.place == ut
 
-        for db_item in (us, library, uk, ut):
-            db_session.delete(db_item)
+        for setting_obj in db_session.query(ConfigurationSetting).all():
+            db_session.delete(setting_obj)
         db_session.commit()
+
+        destroy_test_library(db_session, library)
 
 
 class TestConfigureEmailerScript:
@@ -480,6 +486,14 @@ class TestConfigureEmailerScript:
         assert template == "test"
         assert to == "you@example.com"
 
+        for setting_obj in db_session.query(ConfigurationSetting).all():
+            db_session.delete(setting_obj)
+
+        for integration_obj in db_session.query(ExternalIntegration).all():
+            db_session.delete(integration_obj)
+
+        db_session.commit()
+
 
 class TestConfigureVendorIDScript:
     def test_run(self, db_session):
@@ -512,3 +526,11 @@ class TestConfigureVendorIDScript:
         with pytest.raises(ValueError) as exc:
             script.do_run(db_session, cmd_args=cmd_args)
         assert "Invalid delegate: http://random-site/" in str(exc.value)
+
+        for setting_obj in db_session.query(ConfigurationSetting).all():
+            db_session.delete(setting_obj)
+
+        for integration_obj in db_session.query(ExternalIntegration).all():
+            db_session.delete(integration_obj)
+
+        db_session.commit()

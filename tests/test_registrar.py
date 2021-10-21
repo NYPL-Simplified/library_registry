@@ -1,5 +1,7 @@
 import json
 
+import pytest
+
 from library_registry.authentication_document import AuthenticationDocument
 from library_registry.opds import OPDSCatalog
 from library_registry.problem_details import (
