@@ -28,6 +28,32 @@ from library_registry.util import GeometryUtility
 TEST_DATA_DIR = Path(os.path.dirname(__file__)) / "data"
 
 
+def pytest_configure(config):
+    """Add configuration options to Pytest"""
+    # Register custom markers
+    config.addinivalue_line(
+        "markers", "needsdocstring: Missing or incomplete GIVEN/WHEN/THEN docstring"
+    )
+
+
+# The following two functions work together to let you detect which tests are
+# leaving artifacts in the database. However, they spit out a lot of extra per-test
+# console output, so only uncomment them if you need the functionality, and never
+# leave them uncommented when committing.
+
+# def pytest_report_teststatus(report, config):
+#     return report.outcome, "", report.outcome.upper()
+#
+#
+# @pytest.fixture(autouse=True, scope="function")
+# def how_many_config_settings(db_session, capsys):
+#     yield 1       # this makes the next bit happen *after* the test body
+#     count = db_session.query(ConfigurationSetting).count()
+#     test_name = os.environ.get('PYTEST_CURRENT_TEST')
+#     with capsys.disabled():
+#         print(f"### CS COUNT after {test_name}: {count}")
+
+
 @pytest.fixture(autouse=True, scope="session")
 def init_test_db():
     """For a given testing session, pave and re-initialize the database"""
@@ -161,6 +187,37 @@ def create_test_library():
         return library
 
     return _create_test_library
+
+
+@pytest.fixture
+def destroy_test_library():
+    """Returns a function that will remove a library object and its subsidiary objects from the database."""
+    def _destroy_test_library(db_session_obj, library_obj):
+        for alias in library_obj.aliases:
+            db_session_obj.delete(alias)
+
+        for svc_area in library_obj.service_areas:
+            db_session_obj.delete(svc_area)
+
+        for audience in library_obj.audiences:
+            db_session_obj.delete(audience)
+
+        for collection in library_obj.collections:
+            db_session_obj.delete(collection)
+
+        for dpi in library_obj.delegated_patron_identifiers:
+            db_session_obj.delete(dpi)
+
+        for hyperlink in library_obj.hyperlinks:
+            db_session_obj.delete(hyperlink)
+
+        for setting in library_obj.settings:
+            db_session_obj.delete(setting)
+
+        db_session_obj.delete(library_obj)
+        db_session_obj.commit()
+
+    return _destroy_test_library
 
 
 @pytest.fixture
