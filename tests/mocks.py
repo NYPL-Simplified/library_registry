@@ -1,3 +1,5 @@
+from io import BytesIO
+
 from sqlalchemy.orm.exc import (MultipleResultsFound, NoResultFound)
 
 
@@ -52,3 +54,16 @@ class MockPlace:
         return cls.EVERYWHERE
 
     ##### Private Class Methods ##############################################  # noqa: E266
+
+
+class DummyHTTPResponse:
+    def __init__(self, status_code, headers, content, links=None, url=None):
+        self.status_code = status_code
+        self.headers = headers
+        self.content = content
+        self.links = links or {}
+        self.url = url or "http://url/"
+
+    @property
+    def raw(self):
+        return BytesIO(self.content)
