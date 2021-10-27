@@ -115,146 +115,84 @@ class SessionManager:
 
 
 class Library(Base):
-    """An entry in this table corresponds more or less to an OPDS server.
-
-    Libraries generally serve everyone in a specific list of
-    Places. Libraries may also focus on a subset of the places they
-    serve, and may restrict their service to certain audiences.
     """
+    Library Model
+    """
+    ##### Class Constants ####################################################  # noqa: E266
+    TESTING_STAGE       = 'testing'     # Library should show up in test feed           # noqa: E221
+    PRODUCTION_STAGE    = 'production'  # Library should show up in production feed     # noqa: E221
+    CANCELLED_STAGE     = 'cancelled'   # Library should not show up in any feed        # noqa: E221
+    PLS_ID              = "pls_id"      # Public Library Surveys ID                     # noqa: E221
+    WHITESPACE_REGEX    = re.compile(r"\s+")                                            # noqa: E221
+
+    ##### Public Interface / Magic Methods ###################################  # noqa: E266
+
+    def set_hyperlink(self, rel, *hrefs):
+        """
+        Make sure Library has a Hyperlink with the given `rel` that points to a Resource with
+        one of the given `href`s.
+
+        If there's already a matching Hyperlink, it will be returned unmodified. Otherwise, the
+        first item in `hrefs` will be used as the basis for a new Hyperlink, or an existing
+        Hyperlink will be modified to use the first item in `hrefs` as its Resource.
+
+        :return: A 2-tuple (Hyperlink, is_modified). `is_modified` is True if a new Hyperlink was
+            created _or_ an existing Hyperlink was modified.
+        """
+        if not rel:
+            raise ValueError("No link relation was specified")
+
+        if not hrefs:
+            raise ValueError("No Hyperlink hrefs were specified")
+
+        default_href = hrefs[0]
+        _db = Session.object_session(self)
+        (hyperlink, is_modified) = get_one_or_create(_db, Hyperlink, library=self, rel=rel,)
+
+        if hyperlink.href not in hrefs:
+            hyperlink.href = default_href
+            is_modified = True
+
+        return hyperlink, is_modified
+
+    ##### SQLAlchemy Table properties ########################################  # noqa: E266
+
     __tablename__ = 'libraries'
 
+    ##### SQLAlchemy non-Column components ###################################  # noqa: E266
+
+    stage_enum = Enum(TESTING_STAGE, PRODUCTION_STAGE, CANCELLED_STAGE, name='library_stage')
+
+    ##### SQLAlchemy Columns #################################################  # noqa: E266
+
     id = Column(Integer, primary_key=True)
-
-    # The official name of the library.  This is not unique because
-    # there are many "Springfield Public Library"s.  This is nullable
-    # because there's a period during initial registration where a
-    # library has no name. (TODO: we might be able to change this.)
     name = Column(Unicode, index=True)
-
-    # Human-readable explanation of who the library serves.
     description = Column(Unicode)
-
-    # An internally generated unique URN. This is used in controller
-    # URLs to identify a library. A registry will always use the same
-    # URN to identify a given library, even if the library's OPDS
-    # server changes.
-    internal_urn = Column(
-        Unicode, nullable=False, index=True, unique=True,
-        default=lambda: "urn:uuid:" + str(uuid.uuid4())
-    )
-
-    # The URL to the library's Authentication for OPDS document. This
-    # URL may change over time as libraries move to different servers.
-    # This URL is generally unique, but that's not a database
-    # requirement, since a single library could potentially have two
-    # registry entries.
+    internal_urn = Column(Unicode, nullable=False, index=True, unique=True,
+                          default=lambda: "urn:uuid:" + str(uuid.uuid4()))
     authentication_url = Column(Unicode, index=True)
-
-    # The URL to the library's OPDS server root.
     opds_url = Column(Unicode)
-
-    # The URL to the library's patron-facing web page.
     web_url = Column(Unicode)
-
-    # When our record of this library was last updated.
-    timestamp = Column(DateTime, index=True,
-                       default=lambda: datetime.utcnow(),
-                       onupdate=lambda: datetime.utcnow())
-
-    # The library's logo, as a data: URI.
+    timestamp = Column(DateTime, index=True, default=datetime.utcnow, onupdate=datetime.utcnow)
     logo = Column(Unicode)
-
-    # Constants for determining which stage a library is in.
-    #
-    # Which stage the library is actually in depends on the
-    # combination of Library.library_stage (the library's opinion) and
-    # Library.registry_stage (the registry's opinion).
-    #
-    # If either value is CANCELLED_STAGE, the library is in
-    # CANCELLED_STAGE.
-    #
-    # Otherwise, if either value is TESTING_STAGE, the library is in
-    # TESTING_STAGE.
-    #
-    # Otherwise, the library is in PRODUCTION_STAGE.
-    TESTING_STAGE = 'testing'        # Library should show up in test feed
-    PRODUCTION_STAGE = 'production'  # Library should show up in production feed
-    CANCELLED_STAGE = 'cancelled'    # Library should not show up in any feed
-    stage_enum = Enum(
-        TESTING_STAGE, PRODUCTION_STAGE, CANCELLED_STAGE, name='library_stage'
-    )
-
-    # The library's opinion about which stage a library should be in.
-    _library_stage = Column(
-        stage_enum, index=True, nullable=False, default=TESTING_STAGE,
-        name="library_stage"
-    )
-
-    # The registry's opinion about which stage a library should be in.
-    registry_stage = Column(
-        stage_enum, index=True, nullable=False, default=TESTING_STAGE
-    )
-
-    # Can people get books from this library without authenticating?
-    #
-    # We store this specially because it might be useful to filter
-    # for libraries of this type.
+    _library_stage = Column(stage_enum, index=True, nullable=False, default=TESTING_STAGE, name="library_stage")
+    registry_stage = Column(stage_enum, index=True, nullable=False, default=TESTING_STAGE)
     anonymous_access = Column(Boolean, default=False)
-
-    # Can eligible people get credentials for this library through
-    # an online registration process?
-    #
-    # We store this specially because it might be useful to filter
-    # for libraries of this type.
     online_registration = Column(Boolean, default=False)
-
-    # To issue Short Client Tokens for this library, the registry must
-    # share a short name and a secret with them.
     short_name = Column(Unicode, index=True, unique=True)
-
-    # The shared secret is also used to authenticate requests in the
-    # case where a library's URL has changed.
     shared_secret = Column(Unicode)
 
-    # A library may have alternate names, e.g. "BPL" for the Brooklyn
-    # Public Library.
+    ##### SQLAlchemy Relationships ###########################################  # noqa: E266
+
     aliases = relationship("LibraryAlias", backref='library')
-
-    # A library may serve one or more geographic areas.
     service_areas = relationship('ServiceArea', backref='library')
-
-    # A library may serve one or more specific audiences.
     audiences = relationship('Audience', secondary='libraries_audiences', back_populates="libraries")
-
-    # The registry may have information about the library's
-    # collections of materials. The registry doesn't need to know
-    # details, but it's useful to know approximate counts when finding
-    # libraries that serve specific language communities.
     collections = relationship("CollectionSummary", backref='library')
-
-    # The registry may keep delegated patron identifiers (basically,
-    # Adobe IDs) for a library's patrons. This allows the library's
-    # patrons to decrypt Adobe ACS-encrypted books without having to
-    # license separate Adobe Vendor ID and without the registry
-    # knowing anything about the patrons.
-    delegated_patron_identifiers = relationship(
-        "DelegatedPatronIdentifier", backref='library'
-    )
-
-    # A library may have miscellaneous URIs associated with it. Generally
-    # speaking, the registry is only concerned about these URIs insofar as
-    # it needs to verify that they work.
+    delegated_patron_identifiers = relationship("DelegatedPatronIdentifier", backref='library')
     hyperlinks = relationship("Hyperlink", backref='library')
+    settings = relationship("ConfigurationSetting", backref="library", lazy="joined", cascade="all, delete")
 
-    settings = relationship(
-        "ConfigurationSetting", backref="library",
-        lazy="joined", cascade="all, delete",
-    )
-
-    # The PLS (Public Library Surveys) ID comes from the IMLS' annual survey
-    # (it isn't generated by our database).  It enables us to gather data for metrics
-    # such as number of covered branches and size of service population.
-    PLS_ID = "pls_id"
+    ##### SQLAlchemy Field Validation ########################################  # noqa: E266
 
     @validates('short_name')
     def validate_short_name(self, key, value):
@@ -265,6 +203,120 @@ class Library(Base):
                 'Short name cannot contain the pipe character.'
             )
         return value.upper()
+
+    ##### Properties and Getters/Setters #####################################  # noqa: E266
+
+    @hybrid_property
+    def library_stage(self):
+        return self._library_stage
+
+    @library_stage.setter
+    def library_stage(self, value):
+        """A library can't unilaterally go from being in production to not being in production"""
+        if self.in_production and value != self.PRODUCTION_STAGE:
+            msg = "This library is already in production; only the registry can take it out of production."
+            raise ValueError(msg)
+
+        self._library_stage = value
+
+    @property
+    def pls_id(self):
+        return ConfigurationSetting.for_library(Library.PLS_ID, self)
+
+    @property
+    def number_of_patrons(self):
+        db = Session.object_session(self)
+
+        if not self.in_production:
+            return 0  # Count is only meaningful if the library is in production
+
+        query = db.query(DelegatedPatronIdentifier).filter(
+            DelegatedPatronIdentifier.type == DelegatedPatronIdentifier.ADOBE_ACCOUNT_ID,
+            DelegatedPatronIdentifier.library_id == self.id
+        )
+
+        return query.count()
+
+    @property
+    def in_production(self):
+        """Is this library in production? If library and registry agree on production, it is."""
+        return bool(self.library_stage == self.PRODUCTION_STAGE and self.registry_stage == self.PRODUCTION_STAGE)
+
+    @property
+    def types(self):
+        """
+        Return any special types for this library.
+
+        :yield: A sequence of code constants from LibraryTypes.
+        """
+        service_area = self.service_area
+        if not service_area:
+            return
+
+        code = service_area.library_type
+
+        if code:
+            yield code
+
+        # TODO: in the future, more types, e.g. audience-based, can go here.
+
+    @property
+    def service_area(self):
+        """
+        Return the service area of this Library, assuming there is only one.
+
+        :return: A Place, if there is one well-defined place this library serves; otherwise None.
+        """
+        everywhere = None
+
+        # Group the ServiceAreas by type.
+        by_type = defaultdict(set)
+
+        for a in self.service_areas:
+            if not a.place:
+                continue
+
+            if a.place.type == Place.EVERYWHERE:
+                # We will only return 'everywhere' if we don't find something more specific.
+                everywhere = a.place
+                continue
+
+            by_type[a.type].add(a)
+
+        # If there is a single focus area, use it. Otherwise, if there is a single eligibility area, use that.
+        service_area = None
+
+        for area_type in ServiceArea.FOCUS, ServiceArea.ELIGIBILITY:
+            if len(by_type[area_type]) == 1:
+                [service_area] = by_type[area_type]
+                if service_area.place:
+                    return service_area.place
+
+        # This library serves everywhere, and it doesn't _also_ serve some more specific place.
+        if everywhere:
+            return everywhere
+
+        # This library does not have one ServiceArea that stands out.
+        return None
+
+    @property
+    def service_area_name(self):
+        """
+        Describe the library's service area in a short string a human would understand, e.g. "Kern County, CA".
+
+        This library does the best it can to express a library's service area as the name of a single place,
+        but it's not always possible since libraries can have multiple service areas.
+
+        TODO: We'll want to fetch a library's ServiceAreas (and their Places) as part of the query that fetches
+        libraries, so that this doesn't result in extra DB queries per library.
+
+        :return: A string, or None if the library's service area can't be described as a short string.
+        """
+        if self.service_area:
+            return self.service_area.human_friendly_name
+        return None
+
+    ##### Class Methods ######################################################  # noqa: E266
 
     @classmethod
     def for_short_name(cls, _db, short_name):
@@ -278,75 +330,39 @@ class Library(Base):
 
     @classmethod
     def random_short_name(cls, duplicate_check=None, max_attempts=20):
-        """Generate a random short name for a library.
+        """
+        Generate a random short name for a library.
 
         Library short names are six uppercase letters.
 
-        :param duplicate_check: Call this function to check whether a
-            generated name is a duplicate.
-        :param max_attempts: Stop trying to generate a name after this
-            many failures.
+        :param duplicate_check: Call this function to check whether a generated name is a duplicate.
+        :param max_attempts: Stop trying to generate a name after this many failures.
         """
         attempts = 0
         choice = None
-        while choice is None and attempts < max_attempts:
-            choice = "".join(
-                [random.choice(string.ascii_uppercase)
-                 for i in range(6)]
-            )
-            if duplicate_check and duplicate_check(choice):
+        while not choice and attempts < max_attempts:
+            choice = "".join([random.choice(string.ascii_uppercase) for i in range(6)])
+
+            if callable(duplicate_check) and duplicate_check(choice):
                 choice = None
+
             attempts += 1
-        if choice is None:
-            # This is very bad, but it's better to raise an exception
-            # than to be stuck in an infinite loop.
-            raise ValueError(
-                "Could not generate random short name after %d attempts!" % attempts
-            )
+
+        if choice is None:  # Something's wrong, need to raise an exception.
+            raise ValueError(f"Could not generate random short name after {attempts} attempts!")
+
         return choice
-
-    @hybrid_property
-    def library_stage(self):
-        return self._library_stage
-
-    @library_stage.setter
-    def library_stage(self, value):
-        """A library can't unilaterally go from being in production to
-        not being in production.
-        """
-        if self.in_production and value != self.PRODUCTION_STAGE:
-            raise ValueError(
-                "This library is already in production; only the registry can take it out of production."
-            )
-        self._library_stage = value
-
-    @property
-    def pls_id(self):
-        return ConfigurationSetting.for_library(Library.PLS_ID, self)
-
-    @property
-    def number_of_patrons(self):
-        db = Session.object_session(self)
-        # This is only meaningful if the library is in production.
-        if not self.in_production:
-            return 0
-        query = db.query(DelegatedPatronIdentifier).filter(
-            DelegatedPatronIdentifier.type == DelegatedPatronIdentifier.ADOBE_ACCOUNT_ID,
-            DelegatedPatronIdentifier.library_id == self.id
-        )
-        return query.count()
 
     @classmethod
     def patron_counts_by_library(self, _db, libraries):
-        """Determine the number of registered Adobe Account IDs
-        (~patrons) for each of the given libraries.
+        """
+        Determine the number of registered Adobe Account IDs (~patrons) for each of the given libraries.
 
         :param _db: A database connection.
         :param libraries: A list of Library objects.
         :return: A dictionary mapping library IDs to patron counts.
         """
-        # The concept of 'patron count' only makes sense for
-        # production libraries.
+        # The concept of 'patron count' only makes sense for production libraries.
         library_ids = [lib.id for lib in libraries if lib.in_production]
 
         # Run the SQL query.
@@ -372,136 +388,16 @@ class Library(Base):
 
         return results
 
-    @property
-    def in_production(self):
-        """Is this library in production?
-
-        If both the library and the registry think it should be, it is.
-        """
-        prod = self.PRODUCTION_STAGE
-        return self.library_stage == prod and self.registry_stage == prod
-
-    @property
-    def types(self):
-        """Return any special types for this library.
-
-        :yield: A sequence of code constants from LibraryTypes.
-        """
-        service_area = self.service_area
-        if not service_area:
-            return
-        code = service_area.library_type
-        if code:
-            yield code
-
-        # TODO: in the future, more types, e.g. audience-based, can go
-        # here.
-
-    @property
-    def service_area(self):
-        """Return the service area of this Library, assuming there is only
-        one.
-
-        :return: A Place, if there is one well-defined place this
-        library serves; otherwise None.
-        """
-        everywhere = None
-
-        # Group the ServiceAreas by type.
-        by_type = defaultdict(set)
-        for a in self.service_areas:
-            if not a.place:
-                continue
-            if a.place.type == Place.EVERYWHERE:
-                # We will only return 'everywhere' if we don't find
-                # something more specific.
-                everywhere = a.place
-                continue
-            by_type[a.type].add(a)
-
-        # If there is a single focus area, use it.
-        # Otherwise, if there is a single eligibility area, use that.
-        service_area = None
-        for area_type in ServiceArea.FOCUS, ServiceArea.ELIGIBILITY:
-            if len(by_type[area_type]) == 1:
-                [service_area] = by_type[area_type]
-                if service_area.place:
-                    return service_area.place
-
-        # This library serves everywhere, and it doesn't _also_ serve
-        # some more specific place.
-        if everywhere:
-            return everywhere
-
-        # This library does not have one ServiceArea that stands out.
-        return None
-
-    @property
-    def service_area_name(self):
-        """Describe the library's service area in a short string a human would
-        understand, e.g. "Kern County, CA".
-
-        This library does the best it can to express a library's service
-        area as the name of a single place, but it's not always possible
-        since libraries can have multiple service areas.
-
-        TODO: We'll want to fetch a library's ServiceAreas (and their
-        Places) as part of the query that fetches libraries, so that
-        this doesn't result in extra DB queries per library.
-
-        :return: A string, or None if the library's service area can't be
-           described as a short string.
-        """
-        if self.service_area:
-            return self.service_area.human_friendly_name
-        return None
-
-    @classmethod
-    def _feed_restriction(cls, production, library_field=None, registry_field=None):
-        """Create a SQLAlchemy restriction that only finds libraries that
-        ought to be in the given feed.
-
-        :param production: A boolean. If True, then only libraries in
-        the production stage should be included. If False, then
-        libraries in the production or testing stages should be
-        included.
-
-        :return: A SQLAlchemy expression.
-        """
-        # The library's opinion
-        if library_field is None:
-            library_field = Library.library_stage
-        # The registry's opinion
-        if registry_field is None:
-            registry_field = Library.registry_stage
-
-        prod = cls.PRODUCTION_STAGE
-        test = cls.TESTING_STAGE
-
-        if production:
-            # Both parties must agree that this library is
-            # production-ready.
-            return and_(library_field == prod, registry_field == prod)
-        else:
-            # Both parties must agree that this library is _either_
-            # in the production stage or the testing stage.
-            return and_(
-                library_field.in_((prod, test)),
-                registry_field.in_((prod, test))
-            )
-
     @classmethod
     def nearby(cls, _db, target, max_radius=150, production=True):
         """Find libraries whose service areas include or are close to the
         given point.
-
         :param target: The starting point. May be a Geometry object or
          a 2-tuple (latitude, longitude).
         :param max_radius: How far out from the starting point to search
             for a library's service area, in kilometers.
         :param production: If True, only libraries that are ready for
             production are shown.
-
         :return: A database query that returns lists of 2-tuples
         (library, distance from starting point). Distances are
         measured in meters.
@@ -546,28 +442,24 @@ class Library(Base):
 
     @classmethod
     def search(cls, _db, target, query, production=True):
-        """Try as hard as possible to find a small number of libraries
-        that match the given query.
+        """
+        Try as hard as possible to find a small number of libraries that match the given query.
 
-        :param target: Order libraries by their distance from this
-         point. May be a Geometry object or a 2-tuple (latitude,
-         longitude).
+        :param target: Order libraries by their distance from this point. May be a Geometry object
+            or a 2-tuple (latitude, longitude).
 
         :param query: String to search for.
 
-        :param production: If True, only libraries that are ready for
-            production are shown.
+        :param production: If True, only libraries that are ready for production are shown.
         """
-        # We don't anticipate a lot of libraries or a lot of
-        # localities with the same name, but we need to have _some_
-        # kind of limit just to place an upper bound on how bad things
-        # can get. This will guarantee we never return more than 20
-        # results.
+        # We don't anticipate a lot of libraries or a lot of localities with the same name, but we need to
+        # have _some_ kind of limit just to place an upper bound on how bad things can get. This will guarantee
+        # we never return more than 20 results.
         max_libraries = 10
 
         if not query:
-            # No query, no results.
-            return []
+            return []   # No query, no results.
+
         if target:
             if isinstance(target, tuple):
                 here = GeometryUtility.point(*target)
@@ -576,46 +468,45 @@ class Library(Base):
         else:
             here = None
 
-        library_query, place_query, place_type = cls.query_parts(query)
+        (library_query, place_query, place_type) = cls.query_parts(query)
+
+        preliminary_results = []
+
         # We start with libraries that match the name query.
         if library_query:
             libraries_for_name = cls.search_by_library_name(
-                _db, library_query, here, production).limit(
-                    max_libraries).all()
-        else:
-            libraries_for_name = []
+                _db, library_query, here, production
+            ).limit(max_libraries).all()
+            preliminary_results = preliminary_results + libraries_for_name
 
         # We tack on any additional libraries that match a place query.
         if place_query:
             libraries_for_location = cls.search_by_location_name(
                 _db, place_query, place_type, here, production
             ).limit(max_libraries).all()
-        else:
-            libraries_for_location = []
-
-        if libraries_for_name and libraries_for_location:
-            # Filter out any libraries that show up in both lists.
-            for_name = set(libraries_for_name)
-            libraries_for_location = [
-                x for x in libraries_for_location if x not in for_name
-            ]
+            preliminary_results = preliminary_results + libraries_for_location
 
         # A lot of libraries list their locations only within their description, so it's worth
         # checking the description for the search term.
         libraries_for_description = cls.search_within_description(
             _db, query, here, production
         ).limit(max_libraries).all()
+        preliminary_results = preliminary_results + libraries_for_description
 
-        return libraries_for_name + libraries_for_location + libraries_for_description
+        # Deduplicate the list by library id
+        final_results = list({x[0].id: x for x in preliminary_results}.values())
+
+        # Return the results sorted by distance
+        return sorted(final_results, key=lambda x: x[1])
 
     @classmethod
     def search_by_library_name(cls, _db, name, here=None, production=True):
-        """Find libraries whose name or alias matches the given name.
+        """
+        Find libraries whose name or alias matches the given name.
 
         :param name: Name of the library to search for.
         :param here: Order results by proximity to this location.
-        :param production: If True, only libraries that are ready for
-            production are shown.
+        :param production: If True, only libraries that are ready for production are shown.
         """
         name_matches = cls.fuzzy_match(Library.name, name)
         alias_matches = cls.fuzzy_match(LibraryAlias.name, name)
@@ -623,19 +514,16 @@ class Library(Base):
         return cls.create_query(_db, here, production, name_matches, alias_matches, partial_matches)
 
     @classmethod
-    def search_by_location_name(cls, _db, query, type=None, here=None,
-                                production=True):
-        """Find libraries whose service area overlaps a place with
-        the given name.
+    def search_by_location_name(cls, _db, query, type=None, here=None, production=True):
+        """
+        Find libraries whose service area overlaps a place with the given name.
 
         :param query: Name of the place to search for.
         :param type: Restrict results to places of this type.
         :param here: Order results by proximity to this location.
-        :param production: If True, only libraries that are ready for
-            production are shown.
+        :param production: If True, only libraries that are ready for production are shown.
         """
-        # For a library to match, the Place named by the query must
-        # intersect a Place served by that library.
+        # For a library to match, the Place named by the query must intersect a Place served by that library.
         named_place = aliased(Place)
         qu = _db.query(Library).join(
             Library.service_areas).join(
@@ -643,17 +531,21 @@ class Library(Base):
                     named_place,
                     func.ST_Intersects(Place.geometry, named_place.geometry)
                 ).outerjoin(named_place.aliases)
+
         qu = qu.filter(cls._feed_restriction(production))
         name_match = cls.fuzzy_match(named_place.external_name, query)
         alias_match = cls.fuzzy_match(PlaceAlias.name, query)
         qu = qu.filter(or_(name_match, alias_match))
+
         if type:
             qu = qu.filter(named_place.type == type)
+
         if here:
             min_distance = func.min(func.ST_DistanceSphere(here, named_place.geometry))
             qu = qu.add_columns(min_distance)
             qu = qu.group_by(Library.id)
             qu = qu.order_by(min_distance.asc())
+
         return qu
 
     us_zip = re.compile("^[0-9]{5}$")
@@ -663,29 +555,31 @@ class Library(Base):
     @classmethod
     def create_query(cls, _db, here=None, production=True, *args):
         qu = _db.query(Library).outerjoin(Library.aliases)
+
         if here:
             qu = qu.outerjoin(Library.service_areas).outerjoin(ServiceArea.place)
+
         qu = qu.filter(or_(*args))
         qu = qu.filter(cls._feed_restriction(production))
+
         if here:
             # Order by the minimum distance between one of the
             # library's service areas and the current location.
-            min_distance = func.min(
-                func.ST_DistanceSphere(here, Place.geometry)
-            )
+            min_distance = func.min(func.ST_DistanceSphere(here, Place.geometry))
             qu = qu.add_columns(min_distance)
             qu = qu.group_by(Library.id)
             qu = qu.order_by(min_distance.asc())
+
         return qu
 
     @classmethod
     def search_within_description(cls, _db, query, here=None, production=True):
-        """Find libraries whose descriptions include the search term.
+        """
+        Find libraries whose descriptions include the search term.
 
         :param query: The string to search for.
         :param here: Order results by proximity to this location.
-        :param production: If True, only libraries that are ready for
-            production are shown.
+        :param production: If True, only libraries that are ready for production are shown.
         """
         description_matches = cls.fuzzy_match(Library.description, query)
         partial_matches = cls.partial_match(Library.description, query)
@@ -695,10 +589,8 @@ class Library(Base):
     def query_cleanup(cls, query):
         """Clean up a query."""
         query = query.lower()
-        query = cls.running_whitespace.sub(" ", query).strip()
-
-        # Correct the most common misspelling of 'library'.
-        query = query.replace("libary", "library")
+        query = cls.WHITESPACE_REGEX.sub(" ", query).strip()
+        query = query.replace("libary", "library")  # Correct the most common misspelling of 'library'
         return query
 
     @classmethod
@@ -706,54 +598,52 @@ class Library(Base):
         """Try to interpret a query as a postal code."""
         if cls.us_zip.match(query):
             return query
+
         match = cls.us_zip_plus_4.match(query)
+
         if match:
             return query[:5]
 
     @classmethod
     def query_parts(cls, query):
-        """Turn a query received by a user into a set of things to
-        check against different bits of the database.
+        """
+        Turn a query received by a user into a set of things to check against different bits of the database.
         """
         query = cls.query_cleanup(query)
-
         postal_code = cls.as_postal_code(query)
+
         if postal_code:
-            # The query is a postal code. Don't even bother searching
-            # for a library name -- just find that code.
+            # The query is a postal code. Don't even bother searching for a library name -- just find that code.
             return None, postal_code, Place.POSTAL_CODE
 
-        # In theory, absolutely anything could be a library name or
-        # alias. We'll let Levenshtein distance take care of minor
-        # typos, but we don't process the query very much before
-        # seeing if it matches a library name.
+        # In theory, absolutely anything could be a library name or alias. We'll let Levenshtein distance
+        # take care of minor typos, but we don't process the query very much before seeing if it matches a
+        # library name.
         library_query = query
 
-        # If the query looks like a library name, extract a location
-        # from it. This will find the public library in Irvine from
-        # "irvine public library", even though there is no library
-        # called the "Irvine Public Library".
+        # If the query looks like a library name, extract a location from it. This will find the public library
+        # in Irvine from "irvine public library", even though there is no library called the "Irvine Public Library".
         #
-        # NOTE: This will fall down if there is a place with "Library"
-        # in the name, but there are no such places in the US.
+        # NOTE: This will fall down if there is a place with "Library" in the name, but there are no such
+        # places in the US.
         place_query = query
         place_type = None
+
         for indicator in 'public library', 'library':
             if indicator in place_query:
                 place_query = place_query.replace(indicator, '').strip()
 
-        place_query, place_type = Place.parse_name(place_query)
+        (place_query, place_type) = Place.parse_name(place_query)
 
         return library_query, place_query, place_type
 
     @classmethod
     def fuzzy_match(cls, field, value):
-        """Create a SQL clause that attempts a fuzzy match of the given
-        field against the given value.
+        """
+        Create a SQL clause that attempts a fuzzy match of the given field against the given value.
 
-        If the field's value is less than six characters, we require
-        an exact (case-insensitive) match. Otherwise, we require a
-        Levenshtein distance of less than two between the field value and
+        If the field's value is less than six characters, we require an exact (case-insensitive) match.
+        Otherwise, we require a Levenshtein distance of less than two between the field value and
         the provided value.
         """
         is_long = func.length(field) >= 6
@@ -764,46 +654,43 @@ class Library(Base):
 
     @classmethod
     def partial_match(cls, field, value):
-        """Create a SQL clause that attempts to match a partial value--e.g.
-        just one word of a library's name--against the given field."""
-        return field.ilike("%{}%".format(value))
-
-    def set_hyperlink(self, rel, *hrefs):
-        """Make sure this library has a Hyperlink with the given `rel` that
-        points to a Resource with one of the given `href`s.
-
-        If there's already a matching Hyperlink, it will be returned
-        unmodified. Otherwise, the first item in `hrefs` will be used
-        as the basis for a new Hyperlink, or an existing Hyperlink
-        will be modified to use the first item in `hrefs` as its
-        Resource.
-
-        :return: A 2-tuple (Hyperlink, is_modified). `is_modified`
-            is True if a new Hyperlink was created _or_ an existing
-            Hyperlink was modified.
-
         """
-        if not rel:
-            raise ValueError("No link relation was specified")
-        if not hrefs:
-            raise ValueError("No Hyperlink hrefs were specified")
-        default_href = hrefs[0]
-        _db = Session.object_session(self)
-        hyperlink, is_modified = get_one_or_create(
-            _db, Hyperlink, library=self, rel=rel,
-        )
-
-        if hyperlink.href not in hrefs:
-            hyperlink.href = default_href
-            is_modified = True
-
-        return hyperlink, is_modified
+        Create a SQL clause that attempts to match a partial value--e.g. just one word of a library's
+        name--against the given field.
+        """
+        return field.ilike("%{}%".format(value))
 
     @classmethod
     def get_hyperlink(cls, library, rel):
         link = [x for x in library.hyperlinks if x.rel == rel]
         if len(link) > 0:
             return link[0]
+
+    ##### Private Class Methods ##############################################  # noqa: E266
+
+    @classmethod
+    def _feed_restriction(cls, production, library_field=None, registry_field=None):
+        """
+        Create a SQLAlchemy restriction that only finds libraries that ought to be in the given feed.
+
+        :param production: A boolean. If True, then only libraries in the production stage should be included.
+            If False, then libraries in the production or testing stages should be included.
+
+        :return: A SQLAlchemy expression.
+        """
+        if library_field is None:
+            library_field = Library.library_stage    # The library's opinion
+
+        if registry_field is None:
+            registry_field = Library.registry_stage  # The registry's opinion
+
+        prod = cls.PRODUCTION_STAGE
+        test = cls.TESTING_STAGE
+
+        if production:      # Both parties must agree that this library is production-ready
+            return and_(library_field == prod, registry_field == prod)
+        else:               # Both must agree library is in _either_ prod stage or test stage
+            return and_(library_field.in_((prod, test)), registry_field.in_((prod, test)))
 
 
 class LibraryAlias(Base):
