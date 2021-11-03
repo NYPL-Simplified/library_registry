@@ -35,7 +35,7 @@ from library_registry.constants import (
     PLACE_POSTAL_CODE,
     PLACE_STATE,
 )
-from library_registry.config import Configuration
+from library_registry.config import CannotSendEmail, Configuration
 from library_registry.emailer import Emailer
 from library_registry.model_helpers import (create, generate_secret, get_one, get_one_or_create)
 from library_registry.util import GeometryUtility
@@ -1417,55 +1417,55 @@ class Hyperlink(Base):
         :param emailer: An Emailer, for sending out the email.
         :param url_for: An implementation of Flask's url_for, used to generate a validation link if necessary.
         """
-        if not emailer or not url_for:  # We can't actually send any emails.
+        # Early exit conditions
+        if (
+            not isinstance(emailer, Emailer)                # Not passed a valid Emailer
+            or not callable(url_for)                        # Not passed a callable url_for
+            or not self.resource                            # Link not related to a Resource
+            or not self.library                             # Link not related to a Library
+            or not isinstance(self.resource, Resource)      # Link resource somehow not a Resource
+            or not isinstance(self.library, Library)        # Link library somehow not a Library
+        ):
             return
 
         _db = Session.object_session(self)
-
-        # These shouldn't happen, but just to be safe, do nothing if this Hyperlink is disconnected from the
-        # other data model objects it needs to do its job.
-        resource = self.resource
-        library = self.library
-
-        if not resource or not library:
-            return
-
-        # Default to sending an informative email with no validation link.
-        email_type = Emailer.ADDRESS_DESIGNATED
-        to_address = resource.href
+        registry_contact_email = ConfigurationSetting.sitewide(_db, Configuration.REGISTRY_CONTACT_EMAIL).value
+        email_type = Emailer.ADDRESS_DESIGNATED     # Default to an informative email with no validation link.
+        to_address = self.resource.href
 
         if to_address.startswith('mailto:'):
             to_address = to_address[7:]
 
         # Make sure there's a Validation object associated with this Resource.
-        if resource.validation is None:
-            resource.validation, is_new = create(_db, Validation)
+        if self.resource.validation is None:
+            (self.resource.validation, validation_is_new) = create(_db, Validation)
         else:
-            is_new = False
+            validation_is_new = False
 
-        validation = resource.validation
-
-        if is_new or not validation.active:
+        if validation_is_new or not self.resource.validation.active:
             # Either this Validation was just created or it expired before being verified. Restart the
             # validation process and send an email that includes a validation link.
-            validation.restart()
             email_type = Emailer.ADDRESS_NEEDS_CONFIRMATION
+            self.resource.validation.restart()
 
         # Create values for all the variables expected by the default templates.
-        template_args = dict(
-            rel_desc=Hyperlink.REL_DESCRIPTIONS.get(self.rel, self.rel),
-            library=library.name,
-            library_web_url=library.web_url,
-            email=to_address,
-            registry_support=ConfigurationSetting.sitewide(_db, Configuration.REGISTRY_CONTACT_EMAIL).value,
-        )
+        template_args = {
+            "rel_desc": Hyperlink.REL_DESCRIPTIONS.get(self.rel, self.rel),
+            "library": self.library.name,
+            "library_web_url": self.library.web_url,
+            "email": to_address,
+            "registry_support": registry_contact_email,
+        }
 
         if email_type == Emailer.ADDRESS_NEEDS_CONFIRMATION:
-            template_args['confirmation_link'] = url_for(
-                "confirm_resource", resource_id=resource.id, secret=validation.secret
-            )
+            template_args['confirmation_link'] = url_for("confirm_resource", resource_id=self.resource.id,
+                                                         secret=self.resource.validation.secret)
 
-        body = emailer.send(email_type, to_address, **template_args)
+        try:
+            body = emailer.send(email_type, to_address, **template_args)
+        except CannotSendEmail as exc:
+            logging.error(str(exc))
+            raise exc
 
         return body
 

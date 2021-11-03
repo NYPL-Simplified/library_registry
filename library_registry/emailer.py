@@ -129,6 +129,8 @@ class Emailer:
         except Exception as exc:
             raise CannotSendEmail(exc)
 
+        return body
+
     ##### Private Methods ####################################################  # noqa: E266
     def _send_email(self, to_address, body, smtp=None):
         """Actually send an email."""

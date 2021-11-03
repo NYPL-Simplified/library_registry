@@ -21,7 +21,10 @@ from library_registry.model import (
     Library,
     Place,
     PlaceAlias,
-    ServiceArea)
+    Resource,
+    ServiceArea,
+    Validation,
+)
 from library_registry.model_helpers import get_one_or_create
 from library_registry.util import GeometryUtility
 
@@ -350,6 +353,47 @@ def create_test_configuration_setting():
         return setting
 
     return _create_test_configuration_setting
+
+
+@pytest.fixture
+def create_test_validation():
+    """
+    Returns a constructor function for creating a Validation object.
+    """
+    def _create_test_validation(db_session, resource, success=None, started_at=None, secret=None):
+        create_kwargs = {"resource": resource}
+
+        for kwarg in ['success', 'started_at', 'secret']:
+            if locals()[kwarg] is not None:
+                create_kwargs[kwarg] = locals()[kwarg]
+
+        (validation, _) = get_one_or_create(db_session, Validation, **create_kwargs)
+
+        return validation
+
+    return _create_test_validation
+
+
+@pytest.fixture
+def create_test_resource():
+    """
+    Returns a constructor function for creating a Resource object.
+    """
+    def _create_test_resource(db_session, href=None, hyperlinks=None, validation=None):
+        test_uuid = str(uuid.uuid4())
+        create_kwargs = {"href": href or f"http://librarysimplified.org/testresource/{test_uuid}"}
+
+        if hyperlinks and all([isinstance(x, Hyperlink) for x in hyperlinks]):
+            create_kwargs["hyperlinks"] = hyperlinks
+
+        if validation and isinstance(validation, Validation):
+            create_kwargs["validation"] = validation
+
+        (resource, _) = get_one_or_create(db_session, Resource, **create_kwargs)
+
+        return resource
+
+    return _create_test_resource
 
 
 ##############################################################################
