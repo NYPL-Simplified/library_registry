@@ -153,7 +153,9 @@ class TestLibraryRegistryAnnotator(ControllerTest):
 
             assert register_link.get("href") == 'http://localhost/register'
             assert register_link.get('rel') == 'register'
-            assert register_link.get('type') == 'application/opds+json;profile=https://librarysimplified.org/rel/profile/directory'
+            assert register_link.get('type') == (
+                'application/opds+json;profile=https://librarysimplified.org/rel/profile/directory'
+            )
 
             assert catalog.catalog.get("metadata").get('adobe_vendor_id') == "VENDORID"
 
@@ -214,15 +216,14 @@ class TestLibraryRegistryController(ControllerTest):
         object.
         """
         # Create some places and libraries.
-        nypl = self.nypl
-        ct_state = self.connecticut_state_library
-        ks_state = self.kansas_state_library
+        nypl = self.nypl                            # noqa: F841
+        ct_state = self.connecticut_state_library   # noqa: F841
+        ks_state = self.kansas_state_library        # noqa: F841
 
-        nyc = self.new_york_city
-        boston = self.boston_ma
-        manhattan_ks = self.manhattan_ks
-        us = self.crude_us
-
+        nyc = self.new_york_city                    # noqa: F841
+        boston = self.boston_ma                     # noqa: F841
+        manhattan_ks = self.manhattan_ks            # noqa: F841
+        us = self.crude_us                          # noqa: F841
 
         self.vendor_id_setup()
 
@@ -244,9 +245,11 @@ class TestLibraryRegistryController(ControllerTest):
         self.oakland = GeometryUtility.point_from_string("37.8,-122.2")
 
     def _is_library(self, expected, actual, has_email=True):
-        # Helper method to check that a library found by a controller is equivalent to a particular library in the database
+        # Helper method to check that a library found by a controller is equivalent
+        # to a particular library in the database
         flattened = {}
-        # Getting rid of the "uuid" key before populating flattened, because its value is just a string, not a subdictionary.
+        # Getting rid of the "uuid" key before populating flattened, because its value
+        # is just a string, not a subdictionary.
         # The UUID information is still being checked elsewhere.
         del actual["uuid"]
         for subdictionary in list(actual.values()):
@@ -272,7 +275,9 @@ class TestLibraryRegistryController(ControllerTest):
             elif k in ["focus", "service"]:
                 area_type_names = dict(focus=ServiceArea.FOCUS, service=ServiceArea.ELIGIBILITY)
                 actual_areas = flattened.get(k)
-                expected_areas = [x.place.human_friendly_name or 'Everywhere' for x in expected.service_areas if x.type == area_type_names[k]]
+                expected_areas = [x.place.human_friendly_name or 'Everywhere'
+                                  for x in expected.service_areas
+                                  if x.type == area_type_names[k]]
                 assert expected_areas == actual_areas
             elif k == Library.PLS_ID:
                 assert expected.pls_id.value == flattened.get(k)
@@ -286,10 +291,13 @@ class TestLibraryRegistryController(ControllerTest):
         expected_categories = ['uuid', 'basic_info', 'urls_and_contact', 'stages', 'areas']
         assert set(library.keys()) == set(expected_categories)
 
-        expected_info_keys = ['name', 'short_name', 'description', 'timestamp', 'internal_urn', 'online_registration', 'pls_id', 'number_of_patrons']
+        expected_info_keys = ['name', 'short_name', 'description', 'timestamp', 'internal_urn',
+                              'online_registration', 'pls_id', 'number_of_patrons']
         assert set(library.get("basic_info").keys()) == set(expected_info_keys)
 
-        expected_url_contact_keys = ['contact_email', 'help_email', 'copyright_email', 'web_url', 'authentication_url', 'contact_validated', 'help_validated', 'copyright_validated', 'opds_url']
+        expected_url_contact_keys = ['contact_email', 'help_email', 'copyright_email', 'web_url',
+                                     'authentication_url', 'contact_validated', 'help_validated',
+                                     'copyright_validated', 'opds_url']
         assert set(library.get("urls_and_contact")) == set(expected_url_contact_keys)
 
         expected_area_keys = ['focus', 'service']
@@ -297,7 +305,6 @@ class TestLibraryRegistryController(ControllerTest):
 
         expected_stage_keys = ['library_stage', 'registry_stage']
         assert set(library.get("stages").keys()) == set(expected_stage_keys)
-
 
     def test_libraries(self):
         # Test that the controller returns a specific set of information for each library.
@@ -315,7 +322,7 @@ class TestLibraryRegistryController(ControllerTest):
         ia = self._library(
             "InternetArchive", "IA", [everywhere], has_email=True
         )
-        in_testing = self._library(
+        in_testing = self._library(                 # noqa: F841
             name="Testing",
             short_name="test_lib",
             library_stage=Library.TESTING_STAGE,
@@ -367,7 +374,7 @@ class TestLibraryRegistryController(ControllerTest):
         self._is_library(in_testing, libraries[3], False)
 
     def test_libraries_opds_qa(self):
-        library = self._library(
+        library = self._library(                    # noqa: F841
             name="Test Cancelled Library",
             short_name="test_cancelled_lib",
             library_stage=Library.CANCELLED_STAGE,
@@ -422,7 +429,7 @@ class TestLibraryRegistryController(ControllerTest):
             assert titles == ['Kansas State Library', 'Connecticut State Library', 'NYPL']
 
     def test_libraries_opds(self):
-        library = self._library(
+        library = self._library(                    # noqa: F841
             name="Test Cancelled Library",
             short_name="test_cancelled_lib",
             library_stage=Library.CANCELLED_STAGE,
@@ -480,7 +487,7 @@ class TestLibraryRegistryController(ControllerTest):
 
             # The nearby library is promoted to the top of the list.
             # The other libraries are still in alphabetical order.
-            assert titles == ['Kansas State Library', 'Connecticut State Library', 'NYPL']        
+            assert titles == ['Kansas State Library', 'Connecticut State Library', 'NYPL']
 
     def test_library_details(self):
         # Test that the controller can look up the complete information for one specific library.
@@ -567,7 +574,7 @@ class TestLibraryRegistryController(ControllerTest):
             response = self.controller.edit_registration()
             assert response._status_code == 200
             assert response.response[0].decode("utf8") == nypl.internal_urn
-            edited_nypl = get_one(self._db, Library, internal_urn=nypl.internal_urn)
+            edited_nypl = get_one(self._db, Library, internal_urn=nypl.internal_urn)    # noqa: F841
 
     def test_validate_email(self):
 
@@ -695,8 +702,8 @@ class TestLibraryRegistryController(ControllerTest):
         self._is_library(kansas, libraries[0])
         self._is_library(connecticut, libraries[1])
 
-        # Searching for a word or phrase found within a library's description returns a dict whose value is a list containing
-        # that library.
+        # Searching for a word or phrase found within a library's description returns
+        # a dict whose value is a list containing that library.
         with self.app.test_request_context("/", method="POST"):
             flask.request.form = MultiDict([
                 ("name", "testing")
@@ -727,7 +734,7 @@ class TestLibraryRegistryController(ControllerTest):
             assert session["username"] == "Admin"
 
     def test_log_in_with_error(self):
-        admin = self._admin()
+        admin = self._admin()   # noqa: F841
         with self.app.test_request_context("/", method="POST"):
             flask.request.form = MultiDict([
                 ("username", "Admin"),
@@ -801,7 +808,9 @@ class TestLibraryRegistryController(ControllerTest):
 
             assert register_link["href"] == url_for("register")
             assert register_link["rel"] == "register"
-            assert register_link["type"] == "application/opds+json;profile=https://librarysimplified.org/rel/profile/directory"
+            assert register_link["type"] == (
+                "application/opds+json;profile=https://librarysimplified.org/rel/profile/directory"
+            )
 
             assert library_link["href"] == unquote(url_for("library", uuid="{uuid}"))
             assert library_link["rel"] == "http://librarysimplified.org/rel/registry/library"
@@ -882,14 +891,16 @@ class TestLibraryRegistryController(ControllerTest):
         with self.app.test_request_context("/"):
             response = self.controller.search(None)
             assert response.status == "200 OK"
-            assert response.headers['Content-Type'] == "application/opensearchdescription+xml"    
+            assert response.headers['Content-Type'] == "application/opensearchdescription+xml"
 
             # The search form can be cached more or less indefinitely.
             assert response.headers['Cache-Control'] == "public, no-transform, max-age: 2592000"
 
             # The search form points the client to the search controller.
             expect_url = self.library_registry.url_for("search")
-            expect_url_tag = '<Url type="application/atom+xml;profile=opds-catalog" template="%s?q={searchTerms}"/>' % expect_url
+            expect_url_tag = (
+                '<Url type="application/atom+xml;profile=opds-catalog" template="%s?q={searchTerms}"/>' % expect_url
+            )
             assert expect_url_tag in response.data.decode("utf8")
 
     def test_qa_search_form(self):
@@ -899,7 +910,9 @@ class TestLibraryRegistryController(ControllerTest):
             assert response.status == "200 OK"
 
             expect_url = self.library_registry.url_for("search_qa")
-            expect_url_tag = '<Url type="application/atom+xml;profile=opds-catalog" template="%s?q={searchTerms}"/>' % expect_url
+            expect_url_tag = (
+                '<Url type="application/atom+xml;profile=opds-catalog" template="%s?q={searchTerms}"/>' % expect_url
+            )
             assert expect_url_tag in response.data.decode("utf8")
 
     def test_search(self):
@@ -933,7 +946,9 @@ class TestLibraryRegistryController(ControllerTest):
 
             assert register_link["href"] == url_for("register")
             assert register_link["rel"] == "register"
-            assert register_link["type"] == "application/opds+json;profile=https://librarysimplified.org/rel/profile/directory"
+            assert register_link["type"] == (
+                "application/opds+json;profile=https://librarysimplified.org/rel/profile/directory"
+            )
 
             assert library_link["href"] == unquote(url_for("library", uuid="{uuid}"))
             assert library_link["rel"] == "http://librarysimplified.org/rel/registry/library"
@@ -946,11 +961,11 @@ class TestLibraryRegistryController(ControllerTest):
         # As we saw in the previous test, this search picks up two
         # libraries when we run it looking for production libraries. If
         # all of the libraries are cancelled, we don't find anything.
-        for l in self._db.query(Library):
-            assert l.registry_stage == Library.PRODUCTION_STAGE
+        for lib in self._db.query(Library):
+            assert lib.registry_stage == Library.PRODUCTION_STAGE
 
-        for l in self._db.query(Library):
-            l.registry_stage = Library.CANCELLED_STAGE
+        for lib in self._db.query(Library):
+            lib.registry_stage = Library.CANCELLED_STAGE
         with self.app.test_request_context("/?q=manhattan"):
             response = self.controller.search(self.manhattan, live=True)
             catalog = json.loads(response.data)
@@ -985,7 +1000,11 @@ class TestLibraryRegistryController(ControllerTest):
         self.http_client.queue_response(
             200,
             media_type,
-            links = {AuthenticationDocument.AUTHENTICATION_DOCUMENT_REL: {'url': auth_url, 'rel': AuthenticationDocument.AUTHENTICATION_DOCUMENT_REL}}
+            links={
+                AuthenticationDocument.AUTHENTICATION_DOCUMENT_REL: {
+                    'url': auth_url, 'rel': AuthenticationDocument.AUTHENTICATION_DOCUMENT_REL
+                }
+            }
         )
 
     def _auth_document(self, key=None):
@@ -999,16 +1018,17 @@ class TestLibraryRegistryController(ControllerTest):
                 }
             ],
             "links": [
-                { "rel": "alternate", "href": "http://circmanager.org",
-                  "type": "text/html" },
-                {"rel": "logo", "href": "data:image/png;imagedata" },
-                {"rel": "register", "href": "http://circmanager.org/new-account" },
-                {"rel": "start", "href": "http://circmanager.org/feed/", "type": "application/atom+xml;profile=opds-catalog"},
+                {"rel": "alternate", "href": "http://circmanager.org", "type": "text/html"},
+                {"rel": "logo", "href": "data:image/png;imagedata"},
+                {"rel": "register", "href": "http://circmanager.org/new-account"},
+                {"rel": "start", "href": "http://circmanager.org/feed/",
+                 "type": "application/atom+xml;profile=opds-catalog"},
                 {"rel": "help", "href": "http://help.library.org/"},
                 {"rel": "help", "href": "mailto:help@library.org"},
-                {"rel": "http://librarysimplified.org/rel/designated-agent/copyright", "href": "mailto:dmca@library.org"},
+                {"rel": "http://librarysimplified.org/rel/designated-agent/copyright",
+                 "href": "mailto:dmca@library.org"},
             ],
-            "service_area": { "US": "Kansas" },
+            "service_area": {"US": "Kansas"},
             "collection_size": 100,
         }
 
@@ -1111,7 +1131,9 @@ class TestLibraryRegistryController(ControllerTest):
             self.http_client.queue_response(404)
             response = self.controller.register(do_get=self.http_client.do_get)
             assert response.uri == INTEGRATION_DOCUMENT_NOT_FOUND.uri
-            assert response.detail == 'No Authentication For OPDS document present at http://circmanager.org/authentication.opds'
+            assert response.detail == (
+                'No Authentication For OPDS document present at http://circmanager.org/authentication.opds'
+            )
 
     def test_register_fails_on_non_authentication_document(self):
         # The request succeeds but returns something other than
@@ -1140,7 +1162,10 @@ class TestLibraryRegistryController(ControllerTest):
             response = self.controller.register(do_get=self.http_client.do_get)
 
             assert response.uri == INVALID_INTEGRATION_DOCUMENT.uri
-            assert response.detail == "The OPDS authentication document's id (http://circmanager.org/authentication.opds) doesn't match its url (http://a-different-url/)."
+            assert response.detail == (
+                "The OPDS authentication document's id (http://circmanager.org/authentication.opds) "
+                "doesn't match its url (http://a-different-url/)."
+            )
 
     def test_register_fails_on_missing_title(self):
         # The request returns an authentication document but it's missing
@@ -1170,7 +1195,9 @@ class TestLibraryRegistryController(ControllerTest):
             flask.request.form = self.registration_form
             response = self.controller.register(do_get=self.http_client.do_get)
             assert response.uri == INVALID_INTEGRATION_DOCUMENT.uri
-            assert response.detail == "The OPDS authentication document is missing a 'start' link to the root OPDS feed."
+            assert response.detail == (
+                "The OPDS authentication document is missing a 'start' link to the root OPDS feed."
+            )
 
     def test_register_fails_on_start_link_not_found(self):
         # The request returns an authentication document but an attempt
@@ -1249,7 +1276,10 @@ class TestLibraryRegistryController(ControllerTest):
             flask.request.form = self.registration_form
             response = self.controller.register(do_get=self.http_client.do_get)
             assert response.uri == INVALID_INTEGRATION_DOCUMENT.uri
-            assert response.detail == "OPDS root document at http://circmanager.org/feed/ does not link back to authentication document http://circmanager.org/authentication.opds"
+            assert response.detail == (
+                "OPDS root document at http://circmanager.org/feed/ does not link back to "
+                "authentication document http://circmanager.org/authentication.opds"
+            )
 
     def test_register_fails_on_broken_logo_link(self):
         """The request returns a valid authentication document
@@ -1322,7 +1352,9 @@ class TestLibraryRegistryController(ControllerTest):
             self.http_client.queue_response(401)
             response = self.controller.register(do_get=self.http_client.do_get)
             assert response.uri == INVALID_INTEGRATION_DOCUMENT.uri
-            assert response.detail == "401 response at http://circmanager.org/feed/ did not yield an Authentication For OPDS document"
+            assert response.detail == (
+                "401 response at http://circmanager.org/feed/ did not yield an Authentication For OPDS document"
+            )
 
     def test_register_fails_on_401_if_authentication_document_ids_do_not_match(self):
         with self.app.test_request_context("/", method="POST"):
@@ -1341,7 +1373,10 @@ class TestLibraryRegistryController(ControllerTest):
 
             response = self.controller.register(do_get=self.http_client.do_get)
             assert response.uri == INVALID_INTEGRATION_DOCUMENT.uri
-            assert response.detail == "Authentication For OPDS document guarding http://circmanager.org/feed/ does not match the one at http://circmanager.org/authentication.opds"
+            assert response.detail == (
+                "Authentication For OPDS document guarding http://circmanager.org/feed/ does not match "
+                "the one at http://circmanager.org/authentication.opds"
+            )
 
     def test_register_succeeds_on_401_if_authentication_document_ids_match(self):
         with self.app.test_request_context("/", method="POST"):
@@ -1390,7 +1425,8 @@ class TestLibraryRegistryController(ControllerTest):
             auth_document = self._auth_document()
 
             # Remove the crucial link.
-            auth_document['links'] = [x for x in auth_document['links'] if x['rel'] != rel or not x['href'].startswith("mailto:")]
+            auth_document['links'] = [x for x in auth_document['links']
+                                      if x['rel'] != rel or not x['href'].startswith("mailto:")]
 
             def _request_fails():
                 self.http_client.queue_response(
@@ -1428,7 +1464,7 @@ class TestLibraryRegistryController(ControllerTest):
         )
         self.queue_opds_success()
 
-        auth_url = "http://circmanager.org/authentication.opds"
+        auth_url = "http://circmanager.org/authentication.opds"     # noqa: F841
         # Send a registration request to the registry.
         with self.app.test_request_context("/", method="POST"):
             flask.request.form = ImmutableMultiDict([
@@ -1462,7 +1498,9 @@ class TestLibraryRegistryController(ControllerTest):
             "from_name": "Test",
             "from_address": "test@library.tld",
             "templates": {
-                "address_needs_confirmation": EmailTemplate("subject", "Hello, %(to_address)s, this is %(from_address)s.")
+                "address_needs_confirmation": EmailTemplate(
+                    "subject", "Hello, %(to_address)s, this is %(from_address)s."
+                )
             },
         }
         self.controller.emailer = UnresponsiveEmailer(**unresponsive_emailer_kwargs)
@@ -1517,7 +1555,7 @@ class TestLibraryRegistryController(ControllerTest):
             # The library has been created. Information from its
             # authentication document has been added to the database.
             library = get_one(self._db, Library, opds_url=opds_url)
-            assert library != None
+            assert library is not None
             assert library.name == "A Library"
             assert library.description == "Description"
             assert library.web_url == "http://circmanager.org"
@@ -1541,7 +1579,10 @@ class TestLibraryRegistryController(ControllerTest):
             # A follow-up request was made to the feed mentioned in that
             # document.
             #
-            assert self.http_client.requests == ["http://circmanager.org/authentication.opds", "http://circmanager.org/feed/"]
+            assert self.http_client.requests == [
+                "http://circmanager.org/authentication.opds",
+                "http://circmanager.org/feed/"
+            ]
 
             # And the document we queued up was fed into the library
             # registry.
@@ -1610,13 +1651,14 @@ class TestLibraryRegistryController(ControllerTest):
             "name": "A Library",
             "service_description": "New and improved",
             "links": [
-                {"rel": "logo", "href": "/logo.png", "type": "image/png" },
-                {"rel": "start", "href": "http://circmanager.org/feed/", "type": "application/atom+xml;profile=opds-catalog"},
+                {"rel": "logo", "href": "/logo.png", "type": "image/png"},
+                {"rel": "start", "href": "http://circmanager.org/feed/",
+                 "type": "application/atom+xml;profile=opds-catalog"},
                 {"rel": "help", "href": "mailto:new-help@library.org"},
                 {"rel": "http://librarysimplified.org/rel/designated-agent/copyright", "href": "mailto:me@library.org"},
 
             ],
-            "service_area": { "US": "Connecticut" },
+            "service_area": {"US": "Connecticut"},
         }
         self.http_client.queue_response(
             200, content=json.dumps(auth_document), url=auth_document['id']
@@ -1624,7 +1666,11 @@ class TestLibraryRegistryController(ControllerTest):
         self.queue_opds_success()
 
         # We have a new logo as well.
-        image_data = b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x01\x03\x00\x00\x00%\xdbV\xca\x00\x00\x00\x06PLTE\xffM\x00\x01\x01\x01\x8e\x1e\xe5\x1b\x00\x00\x00\x01tRNS\xcc\xd24V\xfd\x00\x00\x00\nIDATx\x9cc`\x00\x00\x00\x02\x00\x01H\xaf\xa4q\x00\x00\x00\x00IEND\xaeB`\x82'
+        image_data = (
+            b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x01\x03\x00\x00\x00%\xdbV'
+            b'\xca\x00\x00\x00\x06PLTE\xffM\x00\x01\x01\x01\x8e\x1e\xe5\x1b\x00\x00\x00\x01tRNS\xcc\xd24V'
+            b'\xfd\x00\x00\x00\nIDATx\x9cc`\x00\x00\x00\x02\x00\x01H\xaf\xa4q\x00\x00\x00\x00IEND\xaeB`\x82'
+        )
         self.http_client.queue_response(200, content=image_data, media_type="image/png")
 
         # So the library re-registers itself, and gets an updated
@@ -1651,7 +1697,7 @@ class TestLibraryRegistryController(ControllerTest):
 
             # The library's new data is also in the database.
             library = get_one(self._db, Library, opds_url=opds_url)
-            assert library != None
+            assert library is not None
             assert library.name == "A Library"
             assert library.description == "New and improved"
             assert library.web_url is None
@@ -1704,8 +1750,11 @@ class TestLibraryRegistryController(ControllerTest):
             # Authentication For OPDS document, and the request to
             # get the root OPDS feed, the registry made a
             # follow-up request to download the library's logo.
-            assert self.http_client.requests == ["http://circmanager.org/authentication.opds", "http://circmanager.org/feed/", "http://circmanager.org/logo.png"]
-
+            assert self.http_client.requests == [
+                "http://circmanager.org/authentication.opds",
+                "http://circmanager.org/feed/",
+                "http://circmanager.org/logo.png"
+            ]
 
         # If we include the old secret in a request and also set
         # reset_shared_secret, the registry will generate a new
@@ -1738,7 +1787,6 @@ class TestLibraryRegistryController(ControllerTest):
             encryptor = PKCS1_OAEP.new(key)
             encrypted_secret = base64.b64decode(catalog["metadata"]["shared_secret"])
             assert encryptor.decrypt(encrypted_secret).decode("utf8") == library.shared_secret
-                
 
         old_secret = library.shared_secret
 
@@ -1762,7 +1810,7 @@ class TestLibraryRegistryController(ControllerTest):
                     do_get=self.http_client.do_get
                 )
 
-                assert response.status_code ==  200
+                assert response.status_code == 200
                 assert library.shared_secret == old_secret
 
     def test_register_with_secret_changes_authentication_url_and_opds_url(self):
@@ -1782,7 +1830,7 @@ class TestLibraryRegistryController(ControllerTest):
         new_auth_url = auth_document['id']
         [new_opds_url] = [
             x['href'] for x in auth_document['links']
-            if x['rel']=='start'
+            if x['rel'] == 'start'
         ]
         self.http_client.queue_response(
             200, content=json.dumps(auth_document), url=new_auth_url
@@ -1820,6 +1868,7 @@ class TestValidationController(ControllerTest):
                 return (status_code, message)
 
         controller = Mock(self.library_registry)
+
         def assert_response(resource_id, secret, status_code, message):
             """Invoke the validate() method with the given secret
             and verify that html_response is called with the given
@@ -1844,7 +1893,7 @@ class TestValidationController(ControllerTest):
         secret2 = needs_validation_2.validation.secret
 
         link3, ignore = library.set_hyperlink("rel2", "mailto:3@library.org")
-        not_started = link3.resource
+        not_started = link3.resource    # noqa: F841
 
         # Simple tests for missing fields or failed lookups.
         assert_response(
@@ -1956,7 +2005,7 @@ class TestCoverageController(ControllerTest):
 
         # Creating two states with the same name is the simplest way
         # to create an ambiguity problem.
-        massachussets.external_name="Kansas"
+        massachussets.external_name = "Kansas"
         self.parse_to("Kansas", [], ambiguous={"US": ["Kansas"]})
 
     def test_library_eligibility_and_focus(self):
