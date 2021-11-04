@@ -9,9 +9,7 @@ from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.orm.session import Session
 
 from library_registry.app import create_app, test_db_url
-from library_registry.config import Configuration
 from library_registry.model import (
-    create,
     Admin,
     Audience,
     Base,
@@ -37,6 +35,9 @@ def pytest_configure(config):
     config.addinivalue_line(
         "markers", "needsdocstring: Missing or incomplete GIVEN/WHEN/THEN docstring"
     )
+    config.addinivalue_line(
+        "markers", "needsdecomposition: Test is too complex, needs to be decomposed"
+    )
 
 
 @pytest.fixture(autouse=True, scope="session")
@@ -53,25 +54,6 @@ def init_test_db():
     with engine.connect() as conn:
         Base.metadata.create_all(conn)
 
-    engine.dispose()
-
-
-@pytest.fixture(autouse=True, scope="session")
-def setup_test_adobe_integration(init_test_db):
-    """For a given testing session, set up an Adobe integration"""
-    engine = create_engine(test_db_url)
-    with engine.connect() as connection:
-        session = Session(connection)
-        (integration, _) = create(
-            session,
-            ExternalIntegration,
-            protocol=ExternalIntegration.ADOBE_VENDOR_ID,
-            goal=ExternalIntegration.DRM_GOAL
-        )
-        integration.setting(Configuration.ADOBE_VENDOR_ID).value = "VENDORID"
-        integration.setting(Configuration.ADOBE_VENDOR_ID_NODE_VALUE).value = "0x685b35c00f05"
-        session.flush()
-        session.close()
     engine.dispose()
 
 
@@ -204,6 +186,9 @@ def destroy_test_library():
             db_session_obj.delete(hyperlink)
 
         for setting in library_obj.settings:
+            db_session_obj.delete(setting)
+
+        for setting in db_session_obj.query(ConfigurationSetting).filter(Library.id == library_obj.id):
             db_session_obj.delete(setting)
 
         db_session_obj.delete(library_obj)
@@ -673,7 +658,7 @@ def places(
 
 
 @pytest.fixture
-def nypl(db_session, create_test_library, new_york_city, zip_11212):
+def nypl(db_session, create_test_library, destroy_test_library, new_york_city, zip_11212):
     """The New York Public Library"""
     library = create_test_library(
         db_session, library_name="NYPL", short_name="nypl",
@@ -681,12 +666,11 @@ def nypl(db_session, create_test_library, new_york_city, zip_11212):
     )
     db_session.commit()
     yield library
-    db_session.delete(library)
-    db_session.commit()
+    destroy_test_library(db_session, library)
 
 
 @pytest.fixture
-def connecticut_state_library(db_session, create_test_library, connecticut_state):
+def connecticut_state_library(db_session, create_test_library, destroy_test_library, connecticut_state):
     """The Connecticut State Library"""
     library = create_test_library(
         db_session, library_name="Connecticut State Library", short_name="CT",
@@ -694,21 +678,19 @@ def connecticut_state_library(db_session, create_test_library, connecticut_state
     )
     db_session.commit()
     yield library
-    db_session.delete(library)
-    db_session.commit()
+    destroy_test_library(db_session, library)
 
 
 @pytest.fixture
-def kansas_state_library(db_session, create_test_library, kansas_state):
+def kansas_state_library(db_session, create_test_library, destroy_test_library, kansas_state, manhattan_ks):
     """The Kansas State Library"""
     library = create_test_library(
         db_session, library_name="Kansas State Library", short_name="KS",
-        eligibility_areas=[kansas_state], has_email=True
+        eligibility_areas=[kansas_state, manhattan_ks], has_email=True
     )
     db_session.commit()
     yield library
-    db_session.delete(library)
-    db_session.commit()
+    destroy_test_library(db_session, library)
 
 
 @pytest.fixture

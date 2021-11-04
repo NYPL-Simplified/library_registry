@@ -442,24 +442,25 @@ class Library(Base):
 
     @classmethod
     def search(cls, _db, target, query, production=True):
-        """
-        Try as hard as possible to find a small number of libraries that match the given query.
-
-        :param target: Order libraries by their distance from this point. May be a Geometry object
-            or a 2-tuple (latitude, longitude).
-
+        """Try as hard as possible to find a small number of libraries
+        that match the given query.
+        :param target: Order libraries by their distance from this
+         point. May be a Geometry object or a 2-tuple (latitude,
+         longitude).
         :param query: String to search for.
-
-        :param production: If True, only libraries that are ready for production are shown.
+        :param production: If True, only libraries that are ready for
+            production are shown.
         """
-        # We don't anticipate a lot of libraries or a lot of localities with the same name, but we need to
-        # have _some_ kind of limit just to place an upper bound on how bad things can get. This will guarantee
-        # we never return more than 20 results.
+        # We don't anticipate a lot of libraries or a lot of
+        # localities with the same name, but we need to have _some_
+        # kind of limit just to place an upper bound on how bad things
+        # can get. This will guarantee we never return more than 20
+        # results.
         max_libraries = 10
 
         if not query:
-            return []   # No query, no results.
-
+            # No query, no results.
+            return []
         if target:
             if isinstance(target, tuple):
                 here = GeometryUtility.point(*target)
@@ -468,36 +469,54 @@ class Library(Base):
         else:
             here = None
 
-        (library_query, place_query, place_type) = cls.query_parts(query)
-
-        preliminary_results = []
-
+        library_query, place_query, place_type = cls.query_parts(query)
         # We start with libraries that match the name query.
         if library_query:
             libraries_for_name = cls.search_by_library_name(
-                _db, library_query, here, production
-            ).limit(max_libraries).all()
-            preliminary_results = preliminary_results + libraries_for_name
+                _db, library_query, here, production).limit(
+                    max_libraries).all()
+        else:
+            libraries_for_name = []
 
         # We tack on any additional libraries that match a place query.
         if place_query:
             libraries_for_location = cls.search_by_location_name(
                 _db, place_query, place_type, here, production
             ).limit(max_libraries).all()
-            preliminary_results = preliminary_results + libraries_for_location
+        else:
+            libraries_for_location = []
+
+        if libraries_for_name and libraries_for_location:
+            # Filter out any libraries that show up in both lists.
+            for_name = set(libraries_for_name)
+            libraries_for_location = [
+                x for x in libraries_for_location if x not in for_name
+            ]
 
         # A lot of libraries list their locations only within their description, so it's worth
         # checking the description for the search term.
         libraries_for_description = cls.search_within_description(
             _db, query, here, production
         ).limit(max_libraries).all()
-        preliminary_results = preliminary_results + libraries_for_description
 
-        # Deduplicate the list by library id
-        final_results = list({x[0].id: x for x in preliminary_results}.values())
+        all_results = libraries_for_name + libraries_for_location + libraries_for_description
+        unique_library_ids = []
+        unique_results = []
+        for library in all_results:
+            # Sometimes a 'library' in the list is a Library instance, sometimes it's a 2-tuple,
+            # of Library instance and distance.
+            if isinstance(library, Library) and library.id not in unique_library_ids:
+                unique_library_ids.append(library.id)
+                unique_results.append(library)
+            elif (
+                    isinstance(library, tuple)
+                    and isinstance(library[0], Library)
+                    and library[0].id not in unique_library_ids
+            ):
+                unique_library_ids.append(library[0].id)
+                unique_results.append(library)
 
-        # Return the results sorted by distance
-        return sorted(final_results, key=lambda x: x[1])
+        return unique_results
 
     @classmethod
     def search_by_library_name(cls, _db, name, here=None, production=True):
@@ -883,7 +902,7 @@ class Place(Base):
             # now contains the Place we were looking for.
             return look_in_here
 
-        # If we get here, it means we're looking up "Boston" within Massachussets, or "Kern County"
+        # If we get here, it means we're looking up "Boston" within Massachusetts, or "Kern County"
         # within the United States. In other words, we expect to find at most one place with
         # this name inside the `must_be_inside` object.
         #

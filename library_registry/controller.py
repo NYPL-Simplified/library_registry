@@ -158,13 +158,15 @@ class ViewController(BaseController):
 
 class LibraryRegistryController(BaseController):
 
-    OPENSEARCH_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
- <OpenSearchDescription xmlns="http://a9.com/-/spec/opensearch/1.1/">
-   <ShortName>%(name)s</ShortName>
-   <Description>%(description)s</Description>
-   <Tags>%(tags)s</Tags>
-   <Url type="application/atom+xml;profile=opds-catalog" template="%(url_template)s"/>
- </OpenSearchDescription>"""
+    OPENSEARCH_TEMPLATE = (
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        '<OpenSearchDescription xmlns="http://a9.com/-/spec/opensearch/1.1/">'
+        '<ShortName>%(name)s</ShortName>'
+        '<Description>%(description)s</Description>'
+        '<Tags>%(tags)s</Tags>'
+        '<Url type="application/atom+xml;profile=opds-catalog" template="%(url_template)s"/>'
+        '</OpenSearchDescription>'
+    )
 
     def __init__(self, app, emailer_class=Emailer):
         super(LibraryRegistryController, self).__init__(app)
@@ -582,11 +584,11 @@ class LibraryRegistryController(BaseController):
 
     def register(self, do_get=HTTP.debuggable_get):
         if request.method == 'GET':
-            document = self.registration_document
-            return self.catalog_response(document)
+            return self.catalog_response(self.registration_document)
 
         auth_url = request.form.get("url")
         self.log.info("Got request to register %s", auth_url)
+
         if not auth_url:
             return NO_AUTH_URL
 
@@ -594,22 +596,22 @@ class LibraryRegistryController(BaseController):
         integration_contact_email = integration_contact_uri
         shared_secret = None
         auth_header = request.headers.get('Authorization')
+
         if auth_header and isinstance(auth_header, str) and "bearer" in auth_header.lower():
             shared_secret = auth_header.split(' ', 1)[1]
             self.log.info("Incoming shared secret: %s...", shared_secret[:4])
 
-        # If 'stage' is not provided, it means the client doesn't make the
-        # testing/production distinction. We have to assume they want
-        # production -- otherwise they wouldn't bother registering.
+        # If 'stage' is not provided, it means the client doesn't make the testing/production
+        # distinction. We have to assume they want production -- otherwise they wouldn't
+        # bother registering.
 
         library_stage = request.form.get("stage")
         self.log.info("Incoming stage: %s", library_stage)
         library_stage = library_stage or Library.PRODUCTION_STAGE
 
-        # NOTE: This is commented out until we can say that
-        # registration requires providing a contact email and expect
-        # every new library to be on a circulation manager that can meet
-        # this requirement.
+        # NOTE: This is commented out until we can say that registration requires providing
+        # a contact email and expect every new library to be on a circulation manager that
+        # can meet this requirement.
         #
         # integration_contact_email = self._required_email_address(
         #     integration_contact_uri,
@@ -624,99 +626,82 @@ class LibraryRegistryController(BaseController):
 
         library = None
         elevated_permissions = False
+
         if shared_secret:
-            # Look up a library by the provided shared secret. This
-            # will let us handle the case where the library has
-            # changed URLs (auth_url does not match
-            # library.authentication_url) but the shared secret is the
-            # same.
+            # Look up a library by the provided shared secret. This will let us handle the
+            # case where the library has changed URLs (auth_url does not match library.authentication_url)
+            # but the shared secret is the same.
             library = get_one(self._db, Library, shared_secret=shared_secret)
+
             if not library:
                 __transaction.rollback()
-                return AUTHENTICATION_FAILURE.detailed(
-                    _("Provided shared secret is invalid")
-                )
+                return AUTHENTICATION_FAILURE.detailed(_("Provided shared secret is invalid"))
 
             # This gives the requestor an elevated level of permissions.
             elevated_permissions = True
             library_is_new = False
 
             if library.authentication_url != auth_url:
-                # The library's authentication URL has changed,
-                # e.g. moved from HTTP to HTTPS. The registration
-                # includes a valid shared secret, so it's okay to
-                # modify the corresponding database field.
+                # The library's authentication URL has changed, e.g. moved from HTTP to HTTPS.
+                # The registration includes a valid shared secret, so it's okay to modify the
+                # corresponding database field.
                 #
-                # We want to do this before the registration, so that
-                # we request the new URL instead of the old one.
+                # We want to do this before the registration, so that we request the new URL
+                # instead of the old one.
                 library.authentication_url = auth_url
 
         if not library:
-            # Either this is a library at a known authentication URL
-            # or it's a brand new library.
-            library, library_is_new = get_one_or_create(
-                self._db, Library,
-                authentication_url=auth_url
-            )
+            # Either this is a library at a known authentication URL or it's a brand new library.
+            (library, library_is_new) = get_one_or_create(self._db, Library, authentication_url=auth_url)
 
         registrar = LibraryRegistrar(self._db, do_get=do_get)
         result = registrar.register(library, library_stage)
+
         if isinstance(result, ProblemDetail):
             __transaction.rollback()
             return result
 
-        # At this point registration (or re-registration) has
-        # succeeded, so we won't be rolling back the subtransaction
-        # that created the Library.
+        # At this point registration (or re-registration) has succeeded, so we won't be
+        # rolling back the subtransaction that created the Library.
         __transaction.commit()
         auth_document, hyperlinks_to_create = result
 
-        # Now that we've completed the registration process, we
-        # know the opds_url -- it's the 'start' link found in
-        # the auth_document.
+        # Now that we've completed the registration process, we know the opds_url -- it's
+        # the 'start' link found in the auth_document.
         #
-        # Registration will fail if this link is missing or the
-        # URL doesn't work, so we can assume this is valid.
+        # Registration will fail if this link is missing or the URL doesn't work, so we
+        # can assume this is valid.
         opds_url = auth_document.root['href']
 
         if library_is_new:
-            # The library was just created, so it had no opds_url.
-            # Set it now.
+            # The library was just created, so it had no opds_url. Set it now.
             library.opds_url = opds_url
 
-        # The registration process may have queued up a number of
-        # Hyperlinks that needed to be created (taken from the
-        # library's authentication document), but we also need to
-        # create a hyperlink for the integration contact provided with
-        # the registration request itself.
+        # The registration process may have queued up a number of Hyperlinks that needed
+        # to be created (taken from the library's authentication document), but we also need
+        # to create a hyperlink for the integration contact provided with the registration
+        # request itself.
         if integration_contact_email:
-            hyperlinks_to_create.append(
-                (Hyperlink.INTEGRATION_CONTACT_REL,
-                 [integration_contact_email])
-            )
+            hyperlinks_to_create.append((Hyperlink.INTEGRATION_CONTACT_REL, [integration_contact_email]))
 
         reset_shared_secret = False
+
         if elevated_permissions:
-            # If you have elevated permissions you may ask for the
-            # shared secret to be reset.
-            reset_shared_secret = request.form.get(
-                "reset_shared_secret", False
-            )
+            # If you have elevated permissions you may ask for the shared secret to be reset.
+            reset_shared_secret = request.form.get("reset_shared_secret", False)
 
             if library.opds_url != opds_url:
-                # The library's OPDS URL has changed, e.g. moved from
-                # HTTP to HTTPS. Since we have elevated permissions,
-                # it's okay to modify the corresponding database
-                # field.
+                # The library's OPDS URL has changed, e.g. moved from HTTP to HTTPS.
+                # Since we have elevated permissions, it's okay to modify the corresponding
+                # database field.
                 library.opds_url = opds_url
 
         for rel, candidates in hyperlinks_to_create:
             hyperlink, is_modified = library.set_hyperlink(rel, *candidates)
             if is_modified:
-                # We need to send an email to this email address about
-                # what just happened. This is either so the receipient
-                # can confirm that the address works, or to inform
-                # them a new library is using their address.
+                # We need to send an email to this email address about what just happened.
+                # This is either so the receipient can confirm that the address works, or
+                # to inform them a new library is using their address.
                 try:
                     hyperlink.notify(self.emailer, self.app.url_for)
                 except SMTPException as exc:
@@ -742,6 +727,7 @@ class LibraryRegistryController(BaseController):
         # Annotate the catalog with some information specific to
         # the transaction that's happening right now.
         public_key = auth_document.public_key
+
         if public_key and public_key.get("type") == "RSA":
             public_key = RSA.importKey(public_key.get("value"))
             encryptor = PKCS1_OAEP.new(public_key)
@@ -749,26 +735,24 @@ class LibraryRegistryController(BaseController):
             if not library.short_name:
                 def dupe_check(candidate):
                     return Library.for_short_name(self._db, candidate) is not None
+
                 library.short_name = Library.random_short_name(dupe_check)
 
-            generate_secret = (
-                (library.shared_secret is None) or reset_shared_secret
-            )
+            generate_secret = bool((library.shared_secret is None) or reset_shared_secret)
+
             if generate_secret:
                 library.shared_secret = random_string(24)
 
-            encrypted_secret = encryptor.encrypt(
-                library.shared_secret.encode("utf8")
-            )
+            encrypted_secret = encryptor.encrypt(library.shared_secret.encode("utf8"))
 
             catalog["metadata"]["short_name"] = library.short_name
-            catalog["metadata"]["shared_secret"] = base64.b64encode(
-                encrypted_secret)
+            catalog["metadata"]["shared_secret"] = base64.b64encode(encrypted_secret)
 
         if library_is_new:
             status_code = 201
         else:
             status_code = 200
+
         return self.catalog_response(catalog, status_code)
 
 

@@ -10,7 +10,29 @@ from library_registry.util.http import (
     RequestNetworkException,
     RequestTimedOut,
 )
-from testing import MockRequestsResponse
+
+
+class MockRequestsResponse:
+    """
+    A mock object that simulates an HTTP response from the `requests` library.
+    """
+    def __init__(self, status_code, headers={}, content=None, url=None):
+        self.status_code = status_code
+        self.headers = headers
+        self.content = content
+        self.url = url or "http://url/"
+
+    def json(self):
+        content = self.content
+        # The queued content might be a JSON string or it might
+        # just be the object you'd get from loading a JSON string.
+        if isinstance(content, (bytes, str)):
+            content = json.loads(self.content)
+        return content
+
+    @property
+    def text(self):
+        return self.content.decode("utf8")
 
 
 class TestHTTP:

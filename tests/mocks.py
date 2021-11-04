@@ -2,6 +2,8 @@ from io import BytesIO
 
 from sqlalchemy.orm.exc import (MultipleResultsFound, NoResultFound)
 
+from library_registry.util.http import BadResponseException
+
 
 class MockPlace:
     """Used to test AuthenticationDocument.parse_coverage."""
@@ -67,3 +69,49 @@ class DummyHTTPResponse:
     @property
     def raw(self):
         return BytesIO(self.content)
+
+
+class DummyHTTPClient:
+    def __init__(self):
+        self.responses = []
+        self.requests = []
+
+    def queue_response(
+        self, response_code, media_type="text/html", other_headers=None,
+        content='', links=None, url=None
+    ):
+        headers = {}
+        if media_type:
+            headers["Content-Type"] = media_type
+
+        if other_headers:
+            for k, v in list(other_headers.items()):
+                headers[k.lower()] = v
+
+        self.responses.insert(
+            0, DummyHTTPResponse(response_code, headers, content, links, url)
+        )
+
+    def do_get(self, url, headers=None, allowed_response_codes=None, **kwargs):
+        self.requests.append(url)
+        response = self.responses.pop()
+
+        if isinstance(response.status_code, Exception):
+            raise response.status_code
+
+        # Simulate the behavior of requests, where response.url contains
+        # the final URL that responded to the request.
+        response.url = url
+
+        code = response.status_code
+        series = "%sxx" % (code // 100)
+
+        if (
+            allowed_response_codes and (
+                code not in allowed_response_codes
+                and series not in allowed_response_codes
+            )
+        ):
+            raise BadResponseException(url, "Bad Response!", status_code=code)
+
+        return response

@@ -653,9 +653,10 @@ class TestLibraryModel:
         assert "Manhattan" in [x.name for x in nyc.aliases]
 
         # The Kansas state library covers the entire state, which happens to contain a city called Manhattan.
-        [kansas] = [x.place for x in kansas_state_library.service_areas]
+        [kansas, manhattan_kansas] = [x.place for x in kansas_state_library.service_areas]
         assert kansas.external_name == "Kansas"
         assert kansas.type == Place.STATE
+        assert manhattan_kansas.type == Place.CITY
 
         # A search for 'manhattan' finds both libraries.
         libraries = list(Library.search_by_location_name(db_session, "manhattan"))
