@@ -8,7 +8,7 @@ VENV_ACTUAL = [Path(VENV_BASE_DIR / d) for d
                if d.startswith("simplye_app-") and os.path.isdir(VENV_BASE_DIR / d)][0]
 
 # Shared Settings
-wsgi_app = "app:app"
+wsgi_app = "library_registry.app:app"
 accesslog = "-"
 errorlog = "-"
 loglevel = "info"

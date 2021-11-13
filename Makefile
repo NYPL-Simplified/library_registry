@@ -1,4 +1,4 @@
-.PHONY: help build db-session webapp-shell up up-watch start stop down test clean full-clean build-active up-active up-active-watch test-active down-active
+.PHONY: help install build db-session webapp-shell up up-watch start stop down test clean full-clean build-active up-active up-active-watch test-active down-active
 .DEFAULT_GOAL := help
 
 help:
@@ -8,6 +8,7 @@ help:
 	@echo ""
 	@echo "  Related to Local Development:"
 	@echo ""
+	@echo "    install          - Check out the registry_admin repo to this directory's parent"
 	@echo "    build            - Build the libreg_webapp and libreg_local_db images"
 	@echo "    db-session       - Start a psql session as the superuser on the db container"
 	@echo "    webapp-shell     - Open a shell on the webapp container"
@@ -26,17 +27,22 @@ help:
 	@echo "    build-active     - Build images based on the docker-compose-cicd.yml file"
 	@echo "    up-active        - Bring up the cluster from the docker-compose-cicd.yml file"
 	@echo "    up-active-watch  - Bring up the cluster from the cicd file, stay attached"
-	@echo "    test-active      - Run the test suite on the local libreg_active_webapp container"
+	@echo "    test-active      - Run the test suite on the active container"
+	@echo "    test-active-x    - Run the test suite on the active container, exit on first failure"
 	@echo "    down-active      - Stop the cluster from the cicd file"
+	@echo ""
+
+install:
+	[ -d ../registry_admin ] || git clone git@github.com:NYPL-Simplified/registry_admin.git ../registry_admin
 
 build:
 	docker-compose build
 
 db-session:
-	docker exec -it libreg_local_db psql -U postgres
+	docker exec -it registry_db psql -U postgres
 
 webapp-shell:
-	docker exec -it libreg_webapp /bin/sh
+	docker exec -it registry_webapp /bin/sh
 
 up:
 	docker-compose up -d
@@ -54,10 +60,10 @@ down:
 	docker-compose down
 
 test:
-	docker exec -it libreg_webapp pipenv run pytest tests
+	docker exec -it registry_webapp pipenv run pytest tests
 
 test-x:
-	docker exec -it libreg_webapp pipenv run pytest -x tests
+	docker exec -it registry_webapp pipenv run pytest -x tests
 
 clean:
 	docker-compose down --volumes
@@ -75,7 +81,10 @@ up-active-watch:
 	docker-compose -f docker-compose-cicd.yml up
 
 test-active:
-	docker exec -it libreg_active_webapp pipenv run pytest tests
+	docker exec -it --env TESTING=1 registry_active_webapp pipenv run pytest tests
+
+test-active-x:
+	docker exec -it --env TESTING=1 registry_active_webapp pipenv run pytest -x tests
 
 down-active:
 	docker-compose -f docker-compose-cicd.yml down

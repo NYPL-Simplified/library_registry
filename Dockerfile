@@ -17,10 +17,11 @@ FROM postgis/postgis:12-3.1 AS libreg_local_db
 
 ENV POSTGRES_PASSWORD="password"
 ENV POSTGRES_USER="postgres"
+ENV PGPORT="5433"
 
 COPY ./docker/postgis_init.sh /docker-entrypoint-initdb.d/postgis-init.sh
 
-EXPOSE 5432
+EXPOSE 5433
 ##############################################################################
 
 
@@ -153,6 +154,23 @@ RUN set -ex \
  && pipenv install --dev --skip-lock --clear \
  && apk del --no-network .build-deps
 
+# Build a static version of the front end to serve
+COPY ./package*.json ./
+
+RUN set -ex \
+ && apk add --no-cache --virtual .node-build-deps \
+    make \
+    build-base \
+    python2 \
+    npm \
+ && mkdir /tmp/simplye_npm_build \
+ && cp ./package*.json /tmp/simplye_npm_build \
+ && npm install --prefix /tmp/simplye_npm_build \
+ && mkdir -p /simplye_static/static \
+ && cp /tmp/simplye_npm_build/node_modules/simplified-registry-admin/dist/* /simplye_static/static \
+ && rm -rf /tmp/simplye_npm_build \
+ && apk del --no-network .node-build-deps
+
 COPY ./docker/gunicorn.conf.py /etc/gunicorn/gunicorn.conf.py
 COPY ./docker/nginx.conf /etc/nginx/nginx.conf
 COPY ./docker/supervisord-alpine.ini /etc/supervisord.conf
@@ -173,10 +191,7 @@ ENTRYPOINT ["/bin/sh", "-c", "/docker-entrypoint.sh"]
 FROM builder AS libreg_local
 
 ENV FLASK_ENV development
-ENV SIMPLYE_RUN_WEBPACK_WATCH 1
 ENV TESTING 1
-
-RUN apk add --no-cache npm
 ##############################################################################
 
 
@@ -186,20 +201,6 @@ RUN apk add --no-cache npm
 FROM builder AS libreg_active
 
 ENV FLASK_ENV production
-
-# We'll be building the front end as static, so we need the package files.
-COPY ./package*.json ./
-
-# Compile the front end files and clean up the temporary build directory
-RUN set -ex \
- && apk add --no-cache npm \
- && mkdir /tmp/simplye_npm_build \
- && cp ./package*.json /tmp/simplye_npm_build \
- && npm install --prefix /tmp/simplye_npm_build \
- && mkdir -p /simplye_static/static \
- && cp /tmp/simplye_npm_build/node_modules/simplified-registry-admin/dist/* /simplye_static/static \
- && rm -rf /tmp/simplye_npm_build \
- && apk del npm
 
 COPY . /simplye_app
 ##############################################################################
