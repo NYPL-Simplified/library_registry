@@ -8,7 +8,6 @@ help:
 	@echo ""
 	@echo "  Related to Local Development:"
 	@echo ""
-	@echo "    install          - Check out the registry_admin repo to this directory's parent"
 	@echo "    build            - Build the libreg_webapp and libreg_local_db images"
 	@echo "    db-session       - Start a psql session as the superuser on the db container"
 	@echo "    webapp-shell     - Open a shell on the webapp container"
@@ -31,9 +30,6 @@ help:
 	@echo "    test-active-x    - Run the test suite on the active container, exit on first failure"
 	@echo "    down-active      - Stop the cluster from the cicd file"
 	@echo ""
-
-install:
-	[ -d ../registry_admin ] || git clone git@github.com:NYPL-Simplified/registry_admin.git ../registry_admin
 
 build:
 	docker-compose build
