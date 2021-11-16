@@ -28,7 +28,7 @@ services:
     volumes:
       - type: bind
         source: .
-        target: /simplye_app
+        target: /simplified_app
         read_only: true
 
 volumes:

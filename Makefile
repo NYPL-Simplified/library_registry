@@ -56,10 +56,10 @@ down:
 	docker-compose down
 
 test:
-	docker exec -it registry_webapp pipenv run pytest tests
+	docker exec -it --env TESTING=1 registry_webapp pipenv run pytest tests
 
 test-x:
-	docker exec -it registry_webapp pipenv run pytest -x tests
+	docker exec -it --env TESTING=1 registry_webapp pipenv run pytest -x tests
 
 clean:
 	docker-compose down --volumes

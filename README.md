@@ -1,6 +1,6 @@
-# SimplyE Library Registry
+# Library Simplified: Library Registry
 
-A geographic search engine for matching people to the libraries that serve them. Designed to be a single point of contact for multiple instances of the [SimplyE Circulation Manager](https://github.com/NYPL-Simplified/circulation).
+A geographic search engine for matching people to the libraries that serve them. Designed to be a single point of contact for multiple instances of the [Library Simplified Circulation Manager](https://github.com/NYPL-Simplified/circulation).
 
 ## Documentation
 
