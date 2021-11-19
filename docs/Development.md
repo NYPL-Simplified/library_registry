@@ -34,6 +34,23 @@ make up
 
 The first time you start the cluster, the database container will run the initialization script [`postgis_init.sh`](../docker/postgis_init.sh), which creates dev and test databases, installs PostgreSQL extensions, and creates credentialed users. Since the PostgreSQL data directory is persisted in a Docker Volume, subsequent startups will not re-initialize the database. The webapp container will wait to start its webserver until the database is available and accepting connections. If you want to observe the initialization process, use `make up-watch` instead of `make up`, to keep your terminal attached to the output of the running containers.
 
+If you have previously run a version of the containerized registry, it is possible you'll have a Docker volume remaining to persist the PostgreSQL data directory. If that is the case, and the database in that directory is not configured correctly, you could see output from `make up-watch` like:
+
+```
+registry_db        | PostgreSQL Database directory appears to contain a database; Skipping initialization
+
+[...]
+
+registry_db        | 2021-11-19 22:20:06.563 UTC [74] FATAL:  password authentication failed for user "simplified"
+registry_db        | 2021-11-19 22:20:06.563 UTC [74] DETAIL:  Role "simplified" does not exist.
+
+[...]
+
+registry_webapp    | --- Database unavailable, sleeping 5 seconds
+```
+
+If so, run `make clean` to remove the existing volume, then `make up-watch` again--you should see the database initialization process occur.
+
 While the cluster is running (and after the web server has started), you should be able to access the API endpoints at `http://localhost`, and the administrative web app at `http://localhost/admin/`. The first time you attempt to sign in to the admin app a user will be created with the credentials you supply.
 
 Other lifecycle management commands (a full list is available via `make help`):
