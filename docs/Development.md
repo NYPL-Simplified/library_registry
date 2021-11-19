@@ -4,7 +4,17 @@
 
 The recommended way to get a local development environment is via [Docker](https://www.docker.com/products/docker-desktop). If you need to perform a direct installation, please see the [Non-Docker Installation](./NonDockerInstallation.md) document.
 
-A [`Makefile`](../Makefile) is provided to help manage the local containers for the Registry. If you don't currently have `make` on your system, it should be available from your system's package manager (`apt`, `brew`, etc.) You can also run the recipes in the Makefile by hand, by copying and pasting the commands to your shell.
+### Docker
+
+In addition to installing Docker Desktop (link above), you'll also need an account at [Docker Hub](https://hub.docker.com). Docker works by downloading base machine images to build on top of, and the majority of those are available from Docker Hub. However, the Docker Engine can only locate and pull images on behalf of an authenticated user.
+
+Once you've created an account (or using an account you already have), you'll need to sign in via your Docker Desktop installation. You should be able to do that from the top right corner of the Docker Desktop dashboard window.
+
+### Make
+
+A [`Makefile`](../Makefile) is provided to help manage the local containers for the Registry. If you don't currently have `make` on your system, it should be available from your system's package manager (`apt`, `brew`, etc.) You can also run the recipes in the Makefile by hand, by copying and pasting the commands to your shell, if you can't get or would prefer not to install `make` itself.
+
+### Cloning the repository and building images
 
 The following shell commands will clone this repo and build Docker images for the registry web application and a PostgreSQL database:
 
