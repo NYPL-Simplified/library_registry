@@ -33,7 +33,8 @@ from library_registry.model_helpers import get_one_or_create
 from library_registry.util import GeometryUtility
 
 TEST_DATA_DIR = Path(os.path.dirname(__file__)) / "data"
-test_db_url = Configuration.database_url(test=True)
+
+test_db_url = Configuration.databse_url(test=True)
 
 
 def pytest_configure(config):
