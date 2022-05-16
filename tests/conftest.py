@@ -8,6 +8,11 @@ from sqlalchemy import create_engine
 from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.orm.session import Session
 
+from library_registry.admin import admin
+from library_registry.drm import drm
+from library_registry.library_registration_protocol import libr
+from library_registry.library_list import libr_list
+
 from library_registry.app import create_app
 from library_registry.config import Configuration
 from library_registry.model import (
@@ -28,6 +33,7 @@ from library_registry.model_helpers import get_one_or_create
 from library_registry.util import GeometryUtility
 
 TEST_DATA_DIR = Path(os.path.dirname(__file__)) / "data"
+
 test_db_url = Configuration.databse_url(test=True)
 
 
@@ -80,6 +86,10 @@ def db_session(db_engine):
 def app(db_session):
     app = create_app(testing=True, db_session_obj=db_session)
     app.secret_key = "SUPER SECRET TESTING SECRET"
+    app.register_blueprint(drm)
+    app.register_blueprint(admin)
+    app.register_blueprint(libr)
+    app.register_blueprint(libr_list)
     yield app
 
 

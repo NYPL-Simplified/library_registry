@@ -2,7 +2,7 @@ import base64
 import datetime
 import json
 import random
-import uuid
+from contextlib import contextmanager
 from smtplib import SMTPException
 from urllib.parse import unquote
 
@@ -20,10 +20,14 @@ from library_registry.controller import (
     BaseController,
     CoverageController,
     LibraryRegistry,
+)
+from library_registry.library_registration_protocol.controller import (
     LibraryRegistryAnnotator,
     LibraryRegistryController,
     ValidationController,
 )
+from library_registry.library_list.controller import LibraryListController
+from library_registry.admin.controller import AdminController
 from library_registry.emailer import Emailer, EmailTemplate
 from library_registry.model import (
     Admin,
@@ -87,6 +91,16 @@ def mock_registry_controller(mock_registry):
 
 
 @pytest.fixture
+def mock_admin_controller(mock_registry):
+    admin_controller = AdminController(mock_registry, emailer_class=MockEmailer)
+    yield admin_controller
+
+@pytest.fixture
+def mock_library_list_controller(mock_registry):
+    library_list_controller = LibraryListController(mock_registry, emailer_class=MockEmailer)
+    yield library_list_controller
+
+@pytest.fixture
 def adobe_integration(db_session, create_test_external_integration):
     integration = create_test_external_integration(
         db_session, protocol=ExternalIntegration.ADOBE_VENDOR_ID, goal=ExternalIntegration.DRM_GOAL,
@@ -99,6 +113,7 @@ def adobe_integration(db_session, create_test_external_integration):
 
 
 class TestLibraryRegistryAnnotator:
+    
     def test_annotate_catalog(self, app, db_session, adobe_integration):
         annotator = LibraryRegistryAnnotator(app.library_registry)
 
@@ -133,6 +148,7 @@ class TestLibraryRegistryAnnotator:
 
 
 class TestBaseController:
+    
     def test_library_for_request(self, app, db_session, create_test_library, mock_registry):
         # Test the code that looks up a library by its UUID and sets it as flask.request.library.
         controller = BaseController(mock_registry)
@@ -152,6 +168,7 @@ class TestBaseController:
 
 
 class TestLibraryRegistry:
+    
     def test_instantiated_controllers_with_adobe(self, db_session, adobe_integration):
         registry_with_adobe = MockLibraryRegistry(db_session, testing=True, emailer_class=MockEmailer)
         assert isinstance(registry_with_adobe.adobe_vendor_id, AdobeVendorIDController)
@@ -163,7 +180,6 @@ class TestLibraryRegistry:
 
         # No Adobe Vendor ID was set up.
         assert mock_registry.adobe_vendor_id is None
-
 
 @pytest.fixture
 def registration_form():
@@ -240,213 +256,24 @@ def teardown(db_session, capsys):
 
     db_session.commit()
 
-
-class TestLibraryRegistryController:
-
-    def _is_library(self, expected, actual, has_email=True):
-        # Helper method to check that a library found by a controller is equivalent
-        # to a particular library in the database
-        flattened = {}
-        # Getting rid of the "uuid" key before populating flattened, because its value
-        # is just a string, not a subdictionary.
-        # The UUID information is still being checked elsewhere.
-        del actual["uuid"]
-        for subdictionary in list(actual.values()):
-            flattened.update(subdictionary)
-
-        for k in flattened:
-            if k == "library_stage":
-                assert expected._library_stage == flattened.get("library_stage")
-            elif k == "timestamp":
-                actual_ts = flattened.get("timestamp")
-                expected_ts = expected.timestamp
-                actual_time = [actual_ts.year, actual_ts.month, actual_ts.day]
-                expected_time = [expected_ts.year, expected_ts.month, expected_ts.day]
-                assert expected_time == actual_time
-            elif k.endswith("_email"):
-                if has_email:
-                    expected_email = expected.name + "@library.org"
-                    assert expected_email == flattened.get(k)
-            elif k.endswith("_validated"):
-                if isinstance(flattened.get(k), str):
-                    assert flattened.get(k) == "Not validated"
-                elif isinstance(flattened.get(k), datetime.datetime):
-                    continue
-            elif k == "online_registration":
-                assert str(expected.online_registration) == flattened.get("online_registration")
-            elif k in ["focus", "service"]:
-                area_type_names = dict(focus=ServiceArea.FOCUS, service=ServiceArea.ELIGIBILITY)
-                actual_areas = flattened.get(k)
-                expected_areas = [x.place.human_friendly_name or 'Everywhere'
-                                  for x in expected.service_areas
-                                  if x.type == area_type_names[k]]
-                assert expected_areas == actual_areas
-            elif k == Library.PLS_ID:
-                assert expected.pls_id.value == flattened.get(k)
-            elif k == "number_of_patrons":
-                assert str(getattr(expected, k)) == flattened.get(k)
-            else:
-                assert getattr(expected, k) == flattened.get(k)
-
-    def _check_keys(self, library):
-        # Helper method to check that the controller is sending the right pieces of information about a library.
-        expected_categories = ['uuid', 'basic_info', 'urls_and_contact', 'stages', 'areas']
-        assert set(library.keys()) == set(expected_categories)
-
-        expected_info_keys = ['name', 'short_name', 'description', 'timestamp', 'internal_urn',
-                              'online_registration', 'pls_id', 'number_of_patrons']
-        assert set(library.get("basic_info").keys()) == set(expected_info_keys)
-
-        expected_url_contact_keys = ['contact_email', 'help_email', 'copyright_email', 'web_url',
-                                     'authentication_url', 'contact_validated', 'help_validated',
-                                     'copyright_validated', 'opds_url']
-        assert set(library.get("urls_and_contact")) == set(expected_url_contact_keys)
-
-        expected_area_keys = ['focus', 'service']
-        assert set(library.get("areas")) == set(expected_area_keys)
-
-        expected_stage_keys = ['library_stage', 'registry_stage']
-        assert set(library.get("stages").keys()) == set(expected_stage_keys)
-
-    def test_libraries(
-        self, db_session, nypl, kansas_state_library, connecticut_state_library, create_test_place,
-        create_test_library, mock_registry_controller
-    ):
-        # Test that the controller returns a specific set of information for each library.
-        ct = connecticut_state_library
-        ks = kansas_state_library
-
-        # Setting this up ensures that patron counts are measured.
-        (identifier, _) = DelegatedPatronIdentifier.get_one_or_create(
-            db_session, nypl, str(uuid.uuid4()), DelegatedPatronIdentifier.ADOBE_ACCOUNT_ID, None
-        )
-
-        everywhere = create_test_place(db_session, place_type=Place.EVERYWHERE)
-        ia = create_test_library(db_session, library_name="InternetArchive", short_name="IA",
-                                 eligibility_areas=[everywhere], has_email=True)
-
-        in_testing = create_test_library(db_session, library_name="Testing", short_name="test_lib",
-                                         library_stage=Library.TESTING_STAGE, registry_stage=Library.TESTING_STAGE)
-
-        response = mock_registry_controller.libraries()
-        libraries = response.get("libraries")
-
-        assert len(libraries) == 4
-        for library in libraries:
-            self._check_keys(library)
-
-        expected_names = [expected.name for expected in [ct, ks, nypl, ia]]
-        actual_names = [library.get("basic_info").get("name") for library in libraries]
-        assert set(expected_names) == set(actual_names)
-
-        self._is_library(ct, libraries[0])
-        self._is_library(ia, libraries[1])
-        self._is_library(ks, libraries[2])
-        self._is_library(nypl, libraries[3])
-
-        db_session.delete(everywhere)
-        db_session.commit()
-
-    def test_libraries_qa_admin(
-        self, db_session, create_test_library, nypl,
-        connecticut_state_library, kansas_state_library, mock_registry_controller
-    ):
-        # Test that the controller returns a specific set of information for each library.
-        ct = connecticut_state_library
-        ks = kansas_state_library
-
-        in_testing = create_test_library(db_session, library_name="Testing", short_name="test_lib",
-                                         library_stage=Library.TESTING_STAGE, registry_stage=Library.TESTING_STAGE)
-
-        response = mock_registry_controller.libraries(False)
-        libraries = response.get("libraries")
-
-        assert len(libraries) == 4
-        for library in libraries:
-            self._check_keys(library)
-
-        expected_names = [expected.name for expected in [ct, ks, nypl, in_testing]]
-        actual_names = [library.get("basic_info").get("name") for library in libraries]
-        assert set(expected_names) == set(actual_names)
-
-        self._is_library(ct, libraries[0])
-        self._is_library(ks, libraries[1])
-        self._is_library(nypl, libraries[2])
-        self._is_library(in_testing, libraries[3], False)
-
-    def test_libraries_opds_qa(
-        self, db_session, create_test_library, mock_registry_controller, app,
-        nypl, connecticut_state_library, kansas_state_library
-    ):
-        library = create_test_library(db_session, library_name="Test Cancelled Library",
-                                      short_name="test_cancelled_lib",
-                                      library_stage=Library.CANCELLED_STAGE,
-                                      registry_stage=Library.TESTING_STAGE)
-        response = mock_registry_controller.libraries(False)
-        libraries = response.get("libraries")
-
-        # There are currently four libraries
-        assert len(libraries) == 4
-
-        with app.test_request_context("/libraries"):
-            response = mock_registry_controller.libraries_opds(False)
-
-            assert response.status == "200 OK"
-            assert response.headers['Content-Type'] == OPDSCatalog.OPDS_TYPE
-
-            catalog = response.json
-
-            # The cancelled library got filtered out.
-            assert len(catalog['catalogs']) == 3
-
-            # The other libraries are in alphabetical order.
-            [ct_catalog, ks_catalog, nypl_catalog] = catalog['catalogs']
-            assert ct_catalog['metadata']['title'] == "Connecticut State Library"
-            assert ct_catalog['metadata']['id'] == connecticut_state_library.internal_urn
-
-            assert ks_catalog['metadata']['title'] == "Kansas State Library"
-            assert ks_catalog['metadata']['id'] == kansas_state_library.internal_urn
-
-            assert nypl_catalog['metadata']['title'] == "NYPL"
-            assert nypl_catalog['metadata']['id'] == nypl.internal_urn
-
-            [library_link, register_link, search_link, self_link] = sorted(catalog['links'], key=lambda x: x['rel'])
-            url_for = app.library_registry.url_for
-
-            assert self_link['href'] == url_for("libraries_opds")
-            assert self_link['rel'] == "self"
-            assert self_link['type'] == OPDSCatalog.OPDS_TYPE
-
-            # Try again with a location in Kansas.
-            #
-            # See test_app_server.py to verify that @uses_location converts normal-looking
-            # latitude/longitude into this format.
-            with app.test_request_context("/libraries"):
-                response = mock_registry_controller.libraries_opds(False, location="SRID=4326;POINT(-98 39)")
-
-            catalog = response.json
-            titles = [x['metadata']['title'] for x in catalog['catalogs']]
-
-            # The nearby library is promoted to the top of the list.
-            # The other libraries are still in alphabetical order.
-            assert titles == ['Kansas State Library', 'Connecticut State Library', 'NYPL']
+class TestLibraryListController:
 
     def test_libraries_opds(
-        self, db_session, create_test_library, mock_registry_controller, app,
-        nypl, connecticut_state_library, kansas_state_library
+        self, db_session, create_test_library, mock_registry_controller, mock_library_list_controller, app,
+        nypl, connecticut_state_library, kansas_state_library, mock_admin_controller
     ):
         library = create_test_library(db_session, library_name="Test Cancelled Library",
                                       short_name="test_cancelled_lib",
                                       library_stage=Library.CANCELLED_STAGE,
                                       registry_stage=Library.TESTING_STAGE)
-        response = mock_registry_controller.libraries()
+        response = mock_admin_controller.libraries()
         libraries = response.get("libraries")
 
         # There are currently four libraries, but only the three in production are shown.
         assert len(libraries) == 3
 
         with app.test_request_context("/libraries"):
-            response = mock_registry_controller.libraries_opds()
+            response = mock_library_list_controller.libraries_opds()
 
             assert response.status == "200 OK"
             assert response.headers['Content-Type'] == OPDSCatalog.OPDS_TYPE
@@ -473,7 +300,7 @@ class TestLibraryRegistryController:
             )
             url_for = app.library_registry.url_for
 
-            assert self_link['href'] == url_for("libraries_opds")
+            assert self_link['href'] == url_for("libr_list.libraries_opds")
             assert self_link['rel'] == "self"
             assert self_link['type'] == OPDSCatalog.OPDS_TYPE
 
@@ -483,7 +310,7 @@ class TestLibraryRegistryController:
             # converts normal-looking latitude/longitude into this
             # format.
             with app.test_request_context("/libraries"):
-                response = mock_registry_controller.libraries_opds(location="SRID=4326;POINT(-98 39)")
+                response = mock_library_list_controller.libraries_opds(location="SRID=4326;POINT(-98 39)")
 
             catalog = json.loads(response.data)
             titles = [x['metadata']['title'] for x in catalog['catalogs']]
@@ -491,281 +318,12 @@ class TestLibraryRegistryController:
             # The nearby library is promoted to the top of the list.
             # The other libraries are still in alphabetical order.
             assert titles == ['Kansas State Library', 'Connecticut State Library', 'NYPL']
-
-    def test_library_details(self, db_session, app, nypl, mock_registry_controller):
-        # Test that the controller can look up the complete information for one specific library.
-        def check(has_email=True):
-            uuid = nypl.internal_urn.split("uuid:")[1]
-            with app.test_request_context("/"):
-                response = mock_registry_controller.library_details(uuid, 0)
-            assert response.get("uuid") == uuid
-            self._check_keys(response)
-            self._is_library(nypl, response, has_email)
-
-        check()
-
-        # Delete the library's contact email, simulating an old
-        # library created before this rule was instituted, and try
-        # again.
-        [db_session.delete(x) for x in nypl.hyperlinks]
-        check(False)
-
-    def test_library_details_with_error(self, app, mock_registry_controller):
-        # Test that the controller returns a problem detail document if the requested library doesn't exist.
-        uuid = "not a real UUID!"
-        with app.test_request_context("/"):
-            response = mock_registry_controller.library_details(uuid)
-
-        assert isinstance(response, ProblemDetail)
-        assert response.status_code == 404
-        assert response.title == LIBRARY_NOT_FOUND.title
-        assert response.uri == LIBRARY_NOT_FOUND.uri
-
-    def test_edit_registration(
-        self, db_session, create_test_library, app, mock_registry_controller
-    ):
-        # Test that a specific library's stages can be edited via submitting a form.
-        library = create_test_library(db_session, library_name="Test Library", short_name="test_lib",
-                                      library_stage=Library.CANCELLED_STAGE, registry_stage=Library.TESTING_STAGE)
-        uuid = library.internal_urn.split("uuid:")[1]
-        with app.test_request_context("/", method="POST"):
-            flask.request.form = MultiDict([
-                ("uuid", uuid),
-                ("Library Stage", "testing"),
-                ("Registry Stage", "production"),
-            ])
-
-            response = mock_registry_controller.edit_registration()
-
-        assert response._status_code == 200
-        assert response.response[0].decode("utf8") == library.internal_urn
-
-        edited_library = get_one(db_session, Library, short_name=library.short_name)
-        assert edited_library.library_stage == Library.TESTING_STAGE
-        assert edited_library.registry_stage == Library.PRODUCTION_STAGE
-
-    def test_edit_registration_with_error(self, app, mock_registry_controller):
-        uuid = "not a real UUID!"
-        with app.test_request_context("/", method="POST"):
-            flask.request.form = MultiDict([
-                ("uuid", uuid),
-                ("Library Stage", "testing"),
-                ("Registry Stage", "production"),
-            ])
-            response = mock_registry_controller.edit_registration()
-        assert isinstance(response, ProblemDetail)
-        assert response.status_code == 404
-        assert response.title == LIBRARY_NOT_FOUND.title
-        assert response.uri == LIBRARY_NOT_FOUND.uri
-
-    def test_edit_registration_with_override(self, db_session, nypl, app, mock_registry_controller):
-        # Normally, if a library is already in production, its library_stage cannot be edited.
-        # Admins should be able to override this by using the interface.
-        uuid = nypl.internal_urn.split("uuid:")[1]
-        with app.test_request_context("/", method="POST"):
-            flask.request.form = MultiDict([
-                ("uuid", uuid),
-                ("Library Stage", "cancelled"),
-                ("Registry Stage", "cancelled")
-            ])
-
-            response = mock_registry_controller.edit_registration()
-            assert response._status_code == 200
-            assert response.response[0].decode("utf8") == nypl.internal_urn
-            edited_nypl = get_one(db_session, Library, internal_urn=nypl.internal_urn)    # noqa: F841
-
-    def test_validate_email(self, app, mock_registry_controller, nypl):
-        # You can't validate an email for a nonexistent library.
-        with app.test_request_context("/", method="POST"):
-            flask.request.form = MultiDict([
-                ("uuid", "no:such:library"),
-                ("email", "contact_email")
-            ])
-            response = mock_registry_controller.validate_email()
-        assert isinstance(response, ProblemDetail)
-        assert response.status_code == 404
-        assert response.title == LIBRARY_NOT_FOUND.title
-        assert response.uri == LIBRARY_NOT_FOUND.uri
-
-        uuid = nypl.internal_urn.split("uuid:")[1]
-        validation = nypl.hyperlinks[0].resource.validation
-        assert validation is None
-
-        with app.test_request_context("/", method="POST"):
-            flask.request.form = MultiDict([
-                ("uuid", uuid),
-                ("email", "contact_email")
-            ])
-            mock_registry_controller.validate_email()
-
-        validation = nypl.hyperlinks[0].resource.validation
-        assert isinstance(validation, Validation)
-        assert validation.success is True
-
-    def test_missing_email_error(
-        self, db_session, create_test_library, app, mock_registry_controller
-    ):
-        library_without_email = create_test_library(db_session)
-        uuid = library_without_email.internal_urn.split("uuid:")[1]
-        with app.test_request_context("/", method="POST"):
-            flask.request.form = MultiDict([
-                ("uuid", uuid),
-                ("email", "contact_email")
-            ])
-            response = mock_registry_controller.validate_email()
-
-        assert isinstance(response, ProblemDetail)
-        assert response.status_code == 400
-        assert response.detail == 'The contact URI for this library is missing or invalid'
-        assert response.uri == 'http://librarysimplified.org/terms/problem/invalid-contact-uri'
-
-    def test_add_or_edit_pls_id(self, db_session, nypl, app, mock_registry_controller):
-        # Test that the user can input a new PLS ID
-        assert nypl.pls_id.value is None
-        uuid = nypl.internal_urn.split("uuid:")[1]
-        with app.test_request_context("/", method="POST"):
-            flask.request.form = MultiDict([
-                ("uuid", uuid),
-                ("pls_id", "12345")
-            ])
-            response = mock_registry_controller.add_or_edit_pls_id()
-
-        assert response._status_code == 200
-        assert response.response[0].decode("utf8") == nypl.internal_urn
-
-        library_with_pls_id = get_one(db_session, Library, short_name=nypl.short_name)
-        assert library_with_pls_id.pls_id.value == "12345"
-
-        # Test that the user can edit an existing PLS ID
-        with app.test_request_context("/", method="POST"):
-            flask.request.form = MultiDict([
-                ("uuid", uuid),
-                ("pls_id", "abcde")
-            ])
-            response = mock_registry_controller.add_or_edit_pls_id()
-
-        updated = get_one(db_session, Library, short_name=nypl.short_name)
-        assert updated.pls_id.value == "abcde"
-
-    def test_add_or_edit_pls_id_with_error(self, app, mock_registry_controller):
-        with app.test_request_context("/", method="POST"):
-            flask.request.form = MultiDict([
-                ("uuid", "abc"),
-                ("pls_id", "12345")
-            ])
-            response = mock_registry_controller.add_or_edit_pls_id()
-        assert response.status_code == 404
-        assert response.uri == LIBRARY_NOT_FOUND.uri
-
-    def test_search_details(
-        self, db_session, create_test_library, app, mock_registry_controller,
-        nypl, kansas_state_library, connecticut_state_library
-    ):
-        library = nypl
-        kansas = kansas_state_library
-        connecticut = connecticut_state_library
-        with_description = create_test_library(db_session, library_name="Library With Description",
-                                               has_email=True, description="For testing purposes")
-
-        # Searching for the name of a real library returns a dict whose value is a list containing
-        # that library.
-        with app.test_request_context("/", method="POST"):
-            flask.request.form = MultiDict([("name", "NYPL")])
-            response = mock_registry_controller.search_details()
-
-        for response_library in response.get("libraries"):
-            self._is_library(library, response_library)
-
-        # Searching for part of the library's name--"kansas" instead of "kansas state library" works.
-        with app.test_request_context("/", method="POST"):
-            flask.request.form = MultiDict([("name", "kansas")])
-            response = mock_registry_controller.search_details()
-
-        for response_library in response.get("libraries"):
-            self._is_library(kansas, response_library)
-
-        # Searching for a partial name may yield multiple results.
-        with app.test_request_context("/", method="POST"):
-            flask.request.form = MultiDict([("name", "state")])
-            response = mock_registry_controller.search_details()
-
-        libraries = response.get("libraries")
-        assert len(libraries) == 2
-
-        ct_then_ks = sorted(libraries, key=lambda x: x['basic_info']['short_name'])
-        self._is_library(connecticut, ct_then_ks[0])
-        self._is_library(kansas, ct_then_ks[1])
-
-        # Searching for a word or phrase found within a library's description returns
-        # a dict whose value is a list containing that library.
-        with app.test_request_context("/", method="POST"):
-            flask.request.form = MultiDict([("name", "testing")])
-            response = mock_registry_controller.search_details()
-
-        self._is_library(with_description, response.get("libraries")[0])
-
-        # Searching for a name that cannot be found returns a problem detail.
-        with app.test_request_context("/", method="POST"):
-            flask.request.form = MultiDict([("name", "other")])
-            response = mock_registry_controller.search_details()
-
-        assert response == LIBRARY_NOT_FOUND
-
-    def test_log_in(self, app, mock_registry_controller):
-        with app.test_request_context("/", method="POST"):
-            flask.request.form = MultiDict([("username", "Admin"), ("password", "123")])
-            response = mock_registry_controller.log_in()
-            assert response.status == "302 FOUND"
-            assert session["username"] == "Admin"
-
-    def test_log_in_with_error(self, db_session, app, mock_registry_controller):
-        admin = Admin.authenticate(db_session, "Admin", "123")
-        with app.test_request_context("/", method="POST"):
-            flask.request.form = MultiDict([
-                ("username", "Admin"),
-                ("password", "wrong"),
-            ])
-            response = mock_registry_controller.log_in()
-            assert(isinstance(response, ProblemDetail))
-            assert response.status_code == 401
-            assert response.title == INVALID_CREDENTIALS.title
-            assert response.uri == INVALID_CREDENTIALS.uri
-        db_session.delete(admin)
-        db_session.commit()
-
-    def test_log_in_new_admin(self, app, mock_registry_controller):
-        with app.test_request_context("/", method="POST"):
-            flask.request.form = MultiDict([
-                ("username", "New"),
-                ("password", "password")
-            ])
-            response = mock_registry_controller.log_in()
-            assert response.status == "302 FOUND"
-            assert session["username"] == "New"
-
-    def test_log_out(self, db_session, app, mock_registry_controller):
-        admin = Admin.authenticate(db_session, "Admin", "123")
-        with app.test_request_context("/"):
-            flask.request.form = MultiDict([("username", "Admin"), ("password", "123")])
-            mock_registry_controller.log_in()
-
-            assert session["username"] == "Admin"
-            response = mock_registry_controller.log_out()
-            assert session["username"] == ""
-            assert response.status == "302 FOUND"
-        db_session.delete(admin)
-        db_session.commit()
-
-    def test_instantiate_without_emailer(self, mock_registry):
-        """If there is no emailer configured, the controller will still start up."""
-        controller = LibraryRegistryController(mock_registry)
-        assert controller.emailer is None
-
+    
     def test_nearby(
-        self, app, mock_registry_controller, nypl, connecticut_state_library, manhattan, adobe_integration
+        self, app, mock_library_list_controller, nypl, connecticut_state_library, manhattan, adobe_integration
     ):
         with app.test_request_context("/"):
-            response = mock_registry_controller.nearby(manhattan, live=True)
+            response = mock_library_list_controller.nearby(manhattan, live=True)
             assert isinstance(response, Response)
             assert "200 OK" == response.status
             assert response.headers['Content-Type'] == OPDSCatalog.OPDS_TYPE
@@ -790,41 +348,41 @@ class TestLibraryRegistryController:
             )
             url_for = app.library_registry.url_for
 
-            assert self_link['href'] == url_for("nearby")
+            assert self_link['href'] == url_for("libr_list.nearby")
             assert self_link['rel'] == "self"
             assert self_link['type'] == OPDSCatalog.OPDS_TYPE
 
-            assert search_link['href'] == url_for("search")
+            assert search_link['href'] == url_for("libr_list.search")
             assert search_link['rel'] == "search"
             assert search_link['type'] == "application/opensearchdescription+xml"
 
-            assert register_link["href"] == url_for("register")
+            assert register_link["href"] == url_for("libr.register")
             assert register_link["rel"] == "register"
             assert register_link["type"] == (
                 "application/opds+json;profile=https://librarysimplified.org/rel/profile/directory"
             )
 
-            assert library_link["href"] == unquote(url_for("library", uuid="{uuid}"))
+            assert library_link["href"] == unquote(url_for("libr_list.library", uuid="{uuid}"))
             assert library_link["rel"] == "http://librarysimplified.org/rel/registry/library"
             assert library_link["type"] == "application/opds+json"
             assert library_link.get("templated") is True
 
             assert catalog["metadata"]["adobe_vendor_id"] == "VENDORID"
 
-    def test_nearby_qa(self, db_session, app, mock_registry_controller, manhattan, nypl, connecticut_state_library):
+    def test_nearby_qa(self, db_session, app, mock_library_list_controller, manhattan, nypl, connecticut_state_library):
         # The libraries we used in the previous test are in production.
         # If we move them from production to TESTING, we won't find anything.
         for library in db_session.query(Library):
             library.registry_stage = Library.TESTING_STAGE
 
         with app.test_request_context("/"):
-            response = mock_registry_controller.nearby(manhattan, live=True)
+            response = mock_library_list_controller.nearby(manhattan, live=True)
             catalogs = json.loads(response.data)
             assert catalogs['catalogs'] == []
 
         # However, they will show up in the QA feed.
         with app.test_request_context("/"):
-            response = mock_registry_controller.nearby(manhattan, live=False)
+            response = mock_library_list_controller.nearby(manhattan, live=False)
             catalogs = json.loads(response.data)
             assert len(catalogs['catalogs']) == 2
             [catalog] = [
@@ -841,24 +399,24 @@ class TestLibraryRegistryController:
             )
 
             # The 'register' link is the same as in the main feed.
-            assert register_link["href"] == url_for("register")
+            assert register_link["href"] == url_for("libr.register")
             assert register_link["rel"] == "register"
 
             # So is the 'library' templated link.
-            assert library_link["href"] == unquote(url_for("library", uuid="{uuid}"))
+            assert library_link["href"] == unquote(url_for("libr_list.library", uuid="{uuid}"))
             assert library_link["rel"] == "http://librarysimplified.org/rel/registry/library"
 
             # This is a QA feed, and the 'search' and 'self' links
             # will give results from the QA feed.
-            assert self_link['href'] == url_for("nearby_qa")
+            assert self_link['href'] == url_for("libr_list.nearby_qa")
             assert self_link['rel'] == "self"
 
-            assert search_link['href'] == url_for("search_qa")
+            assert search_link['href'] == url_for("libr_list.search_qa")
             assert search_link['rel'] == "search"
 
-    def test_nearby_no_location(self, app, mock_registry_controller):
+    def test_nearby_no_location(self, app, mock_library_list_controller):
         with app.test_request_context("/"):
-            response = mock_registry_controller.nearby(None)
+            response = mock_library_list_controller.nearby(None)
             assert isinstance(response, Response)
             assert response.status == "200 OK"
             assert response.headers['Content-Type'] == OPDSCatalog.OPDS_TYPE
@@ -868,9 +426,9 @@ class TestLibraryRegistryController:
             # start with.
             assert catalogs['catalogs'] == []
 
-    def test_nearby_no_libraries(self, app, mock_registry_controller, oakland):
+    def test_nearby_no_libraries(self, app, mock_library_list_controller, oakland):
         with app.test_request_context("/"):
-            response = mock_registry_controller.nearby(oakland)
+            response = mock_library_list_controller.nearby(oakland)
             assert isinstance(response, Response)
             assert response.status == "200 OK"
             assert response.headers['Content-Type'] == OPDSCatalog.OPDS_TYPE
@@ -880,9 +438,9 @@ class TestLibraryRegistryController:
             # country from the only ones in the registry.
             assert catalog['catalogs'] == []
 
-    def test_search_form(self, app, mock_registry_controller, mock_registry):
+    def test_search_form(self, app, mock_library_list_controller, mock_registry):
         with app.test_request_context("/"):
-            response = mock_registry_controller.search(None)
+            response = mock_library_list_controller.search(None)
             assert response.status == "200 OK"
             assert response.headers['Content-Type'] == "application/opensearchdescription+xml"
 
@@ -890,27 +448,27 @@ class TestLibraryRegistryController:
             assert response.headers['Cache-Control'] == "public, no-transform, max-age: 2592000"
 
             # The search form points the client to the search controller.
-            expect_url = mock_registry.url_for("search")
+            expect_url = mock_registry.url_for("libr_list.search")
             expect_url_tag = (
                 '<Url type="application/atom+xml;profile=opds-catalog" template="%s?q={searchTerms}"/>' % expect_url
             )
             assert expect_url_tag in response.data.decode("utf8")
 
-    def test_qa_search_form(self, app, mock_registry_controller, mock_registry):
+    def test_qa_search_form(self, app, mock_library_list_controller, mock_registry):
         """The QA search form links to the QA search controller."""
         with app.test_request_context("/"):
-            response = mock_registry_controller.search(None, live=False)
+            response = mock_library_list_controller.search(None, live=False)
             assert response.status == "200 OK"
 
-            expect_url = mock_registry.url_for("search_qa")
+            expect_url = mock_registry.url_for("libr_list.search_qa")
             expect_url_tag = (
                 '<Url type="application/atom+xml;profile=opds-catalog" template="%s?q={searchTerms}"/>' % expect_url
             )
             assert expect_url_tag in response.data.decode("utf8")
 
-    def test_search(self, app, mock_registry_controller, nypl, kansas_state_library, manhattan, adobe_integration):
+    def test_search(self, app, mock_library_list_controller, nypl, kansas_state_library, manhattan, adobe_integration):
         with app.test_request_context("/?q=manhattan"):
-            response = mock_registry_controller.search(manhattan)
+            response = mock_library_list_controller.search(manhattan)
             assert response.status == "200 OK"
             assert response.headers['Content-Type'] == OPDSCatalog.OPDS_TYPE
             catalog = json.loads(response.data)
@@ -928,28 +486,28 @@ class TestLibraryRegistryController:
             url_for = app.library_registry.url_for
 
             # The search results have a self link and a link back to the search form.
-            assert self_link['href'] == url_for("search", q="manhattan")
+            assert self_link['href'] == url_for("libr_list.search", q="manhattan")
             assert self_link['rel'] == "self"
             assert self_link['type'] == OPDSCatalog.OPDS_TYPE
 
-            assert search_link['href'] == url_for("search")
+            assert search_link['href'] == url_for("libr_list.search")
             assert search_link['rel'] == "search"
             assert search_link['type'] == "application/opensearchdescription+xml"
 
-            assert register_link["href"] == url_for("register")
+            assert register_link["href"] == url_for("libr.register")
             assert register_link["rel"] == "register"
             assert register_link["type"] == (
                 "application/opds+json;profile=https://librarysimplified.org/rel/profile/directory"
             )
 
-            assert library_link["href"] == unquote(url_for("library", uuid="{uuid}"))
+            assert library_link["href"] == unquote(url_for("libr_list.library", uuid="{uuid}"))
             assert library_link["rel"] == "http://librarysimplified.org/rel/registry/library"
             assert library_link["type"] == "application/opds+json"
             assert library_link.get("templated") is True
 
             assert catalog["metadata"]["adobe_vendor_id"] == "VENDORID"
 
-    def test_search_qa(self, db_session, app, mock_registry_controller, manhattan, nypl, kansas_state_library):
+    def test_search_qa(self, db_session, app, mock_library_list_controller, manhattan, nypl, kansas_state_library):
         # As we saw in the previous test, this search picks up two
         # libraries when we run it looking for production libraries. If
         # all of the libraries are cancelled, we don't find anything.
@@ -960,7 +518,7 @@ class TestLibraryRegistryController:
             lib.registry_stage = Library.CANCELLED_STAGE
 
         with app.test_request_context("/?q=manhattan"):
-            response = mock_registry_controller.search(manhattan, live=True)
+            response = mock_library_list_controller.search(manhattan, live=True)
             catalog = json.loads(response.data)
             assert catalog['catalogs'] == []
 
@@ -968,19 +526,27 @@ class TestLibraryRegistryController:
         # stage, we find it.
         kansas_state_library.registry_stage = Library.PRODUCTION_STAGE
         with app.test_request_context("/?q=manhattan"):
-            response = mock_registry_controller.search(manhattan, live=True)
+            response = mock_library_list_controller.search(manhattan, live=True)
             catalog = json.loads(response.data)
             [catalog] = catalog['catalogs']
             assert catalog['metadata']['title'] == 'Kansas State Library'
 
-    def test_library(self, nypl, app, mock_registry_controller):
+    def test_library(self, nypl, app, mock_library_list_controller):
         with app.test_request_context("/"):
             flask.request.library = nypl
-            response = mock_registry_controller.library()
+            response = mock_library_list_controller.library()
 
         [catalog_entry] = json.loads(response.data).get("catalogs")
         assert catalog_entry.get("metadata").get("title") == nypl.name
         assert catalog_entry.get("metadata").get("id") == nypl.internal_urn
+
+
+class TestLibraryRegistryController:
+
+    def test_instantiate_without_emailer(self, mock_registry):
+        """If there is no emailer configured, the controller will still start up."""
+        controller = LibraryRegistryController(mock_registry)
+        assert controller.emailer is None
 
     def queue_opds_success(
         self, http_client_obj, auth_url="http://circmanager.org/authentication.opds", media_type=None
@@ -1477,7 +1043,6 @@ class TestLibraryRegistryController:
         class UnresponsiveEmailer(Emailer):
             def _send_email(*args):
                 raise Exception("message from UnresponsiveEmailer")
-
         unresponsive_emailer_kwargs = {
             "smtp_username": "library",
             "smtp_password": "library",
@@ -2005,3 +1570,334 @@ class TestCoverageController:
 
             eligibility = json.loads(eligibility.data)
             assert eligibility == Place.to_geojson(db_session, new_york_state)
+
+class TestAdminController:
+
+    def _is_library(self, expected, actual, has_email=True):
+        # Helper method to check that a library found by a controller is equivalent
+        # to a particular library in the database
+        flattened = {}
+        # Getting rid of the "uuid" key before populating flattened, because its value
+        # is just a string, not a subdictionary.
+        # The UUID information is still being checked elsewhere.
+        del actual["uuid"]
+        for subdictionary in list(actual.values()):
+            flattened.update(subdictionary)
+
+        for k in flattened:
+            if k == "library_stage":
+                assert expected._library_stage == flattened.get("library_stage")
+            elif k == "timestamp":
+                actual_ts = flattened.get("timestamp")
+                expected_ts = expected.timestamp
+                actual_time = [actual_ts.year, actual_ts.month, actual_ts.day]
+                expected_time = [expected_ts.year, expected_ts.month, expected_ts.day]
+                assert expected_time == actual_time
+            elif k.endswith("_email"):
+                if has_email:
+                    expected_email = expected.name + "@library.org"
+                    assert expected_email == flattened.get(k)
+            elif k.endswith("_validated"):
+                if isinstance(flattened.get(k), str):
+                    assert flattened.get(k) == "Not validated"
+                elif isinstance(flattened.get(k), datetime.datetime):
+                    continue
+            elif k == "online_registration":
+                assert str(expected.online_registration) == flattened.get("online_registration")
+            elif k in ["focus", "service"]:
+                area_type_names = dict(focus=ServiceArea.FOCUS, service=ServiceArea.ELIGIBILITY)
+                actual_areas = flattened.get(k)
+                expected_areas = [x.place.human_friendly_name or 'Everywhere'
+                                  for x in expected.service_areas
+                                  if x.type == area_type_names[k]]
+                assert expected_areas == actual_areas
+            elif k == Library.PLS_ID:
+                assert expected.pls_id.value == flattened.get(k)
+            elif k == "number_of_patrons":
+                assert str(getattr(expected, k)) == flattened.get(k)
+            else:
+                assert getattr(expected, k) == flattened.get(k)
+
+    def _check_keys(self, library):
+        # Helper method to check that the controller is sending the right pieces of information about a library.
+        expected_categories = ['uuid', 'basic_info', 'urls_and_contact', 'stages', 'areas']
+        assert set(library.keys()) == set(expected_categories)
+
+        expected_info_keys = ['name', 'short_name', 'description', 'timestamp', 'internal_urn',
+                              'online_registration', 'pls_id', 'number_of_patrons']
+        assert set(library.get("basic_info").keys()) == set(expected_info_keys)
+
+        expected_url_contact_keys = ['contact_email', 'help_email', 'copyright_email', 'web_url',
+                                     'authentication_url', 'contact_validated', 'help_validated',
+                                     'copyright_validated', 'opds_url']
+        assert set(library.get("urls_and_contact")) == set(expected_url_contact_keys)
+
+        expected_area_keys = ['focus', 'service']
+        assert set(library.get("areas")) == set(expected_area_keys)
+
+        expected_stage_keys = ['library_stage', 'registry_stage']
+        assert set(library.get("stages").keys()) == set(expected_stage_keys)
+
+    def test_library_details(self, db_session, app, nypl, mock_admin_controller):
+        # Test that the controller can look up the complete information for one specific library.
+        def check(has_email=True):
+            uuid = nypl.internal_urn.split("uuid:")[1]
+            with app.test_request_context("/"):
+                response = mock_admin_controller.library_details(uuid, 0)
+            assert response.get("uuid") == uuid
+            self._check_keys(response)
+            self._is_library(nypl, response, has_email)
+
+        check()
+
+        # Delete the library's contact email, simulating an old
+        # library created before this rule was instituted, and try
+        # again.
+        [db_session.delete(x) for x in nypl.hyperlinks]
+        check(False)
+
+    def test_library_details_with_error(self, app, mock_admin_controller):
+        # Test that the controller returns a problem detail document if the requested library doesn't exist.
+        uuid = "not a real UUID!"
+        with app.test_request_context("/"):
+            response = mock_admin_controller.library_details(uuid)
+
+        assert isinstance(response, ProblemDetail)
+        assert response.status_code == 404
+        assert response.title == LIBRARY_NOT_FOUND.title
+        assert response.uri == LIBRARY_NOT_FOUND.uri
+
+    def test_edit_registration(
+        self, db_session, create_test_library, app, mock_admin_controller
+    ):
+        # Test that a specific library's stages can be edited via submitting a form.
+        library = create_test_library(db_session, library_name="Test Library", short_name="test_lib",
+                                      library_stage=Library.CANCELLED_STAGE, registry_stage=Library.TESTING_STAGE)
+        uuid = library.internal_urn.split("uuid:")[1]
+        with app.test_request_context("/", method="POST"):
+            flask.request.form = MultiDict([
+                ("uuid", uuid),
+                ("Library Stage", "testing"),
+                ("Registry Stage", "production"),
+            ])
+
+            response = mock_admin_controller.edit_registration()
+
+        assert response._status_code == 200
+        assert response.response[0].decode("utf8") == library.internal_urn
+
+        edited_library = get_one(db_session, Library, short_name=library.short_name)
+        assert edited_library.library_stage == Library.TESTING_STAGE
+        assert edited_library.registry_stage == Library.PRODUCTION_STAGE
+
+    def test_edit_registration_with_error(self, app, mock_admin_controller):
+        uuid = "not a real UUID!"
+        with app.test_request_context("/", method="POST"):
+            flask.request.form = MultiDict([
+                ("uuid", uuid),
+                ("Library Stage", "testing"),
+                ("Registry Stage", "production"),
+            ])
+            response = mock_admin_controller.edit_registration()
+        assert isinstance(response, ProblemDetail)
+        assert response.status_code == 404
+        assert response.title == LIBRARY_NOT_FOUND.title
+        assert response.uri == LIBRARY_NOT_FOUND.uri
+
+    def test_edit_registration_with_override(self, db_session, nypl, app, mock_admin_controller):
+        # Normally, if a library is already in production, its library_stage cannot be edited.
+        # Admins should be able to override this by using the interface.
+        uuid = nypl.internal_urn.split("uuid:")[1]
+        with app.test_request_context("/", method="POST"):
+            flask.request.form = MultiDict([
+                ("uuid", uuid),
+                ("Library Stage", "cancelled"),
+                ("Registry Stage", "cancelled")
+            ])
+
+            response = mock_admin_controller.edit_registration()
+            assert response._status_code == 200
+            assert response.response[0].decode("utf8") == nypl.internal_urn
+            edited_nypl = get_one(db_session, Library, internal_urn=nypl.internal_urn)    # noqa: F841
+
+    def test_validate_email(self, app, mock_admin_controller, nypl):
+        # You can't validate an email for a nonexistent library.
+        with app.test_request_context("/", method="POST"):
+            flask.request.form = MultiDict([
+                ("uuid", "no:such:library"),
+                ("email", "contact_email")
+            ])
+            response = mock_admin_controller.validate_email()
+        assert isinstance(response, ProblemDetail)
+        assert response.status_code == 404
+        assert response.title == LIBRARY_NOT_FOUND.title
+        assert response.uri == LIBRARY_NOT_FOUND.uri
+
+        uuid = nypl.internal_urn.split("uuid:")[1]
+        validation = nypl.hyperlinks[0].resource.validation
+        assert validation is None
+
+        with app.test_request_context("/", method="POST"):
+            flask.request.form = MultiDict([
+                ("uuid", uuid),
+                ("email", "contact_email")
+            ])
+            mock_admin_controller.validate_email()
+
+        validation = nypl.hyperlinks[0].resource.validation
+        assert isinstance(validation, Validation)
+        assert validation.success is True
+
+    def test_missing_email_error(
+        self, db_session, create_test_library, app, mock_admin_controller
+    ):
+        library_without_email = create_test_library(db_session)
+        uuid = library_without_email.internal_urn.split("uuid:")[1]
+        with app.test_request_context("/", method="POST"):
+            flask.request.form = MultiDict([
+                ("uuid", uuid),
+                ("email", "contact_email")
+            ])
+            response = mock_admin_controller.validate_email()
+
+        assert isinstance(response, ProblemDetail)
+        assert response.status_code == 400
+        assert response.detail == 'The contact URI for this library is missing or invalid'
+        assert response.uri == 'http://librarysimplified.org/terms/problem/invalid-contact-uri'
+
+    def test_add_or_edit_pls_id(self, db_session, nypl, app, mock_admin_controller):
+        # Test that the user can input a new PLS ID
+        assert nypl.pls_id.value is None
+        uuid = nypl.internal_urn.split("uuid:")[1]
+        with app.test_request_context("/", method="POST"):
+            flask.request.form = MultiDict([
+                ("uuid", uuid),
+                ("pls_id", "12345")
+            ])
+            response = mock_admin_controller.add_or_edit_pls_id()
+
+        assert response._status_code == 200
+        assert response.response[0].decode("utf8") == nypl.internal_urn
+
+        library_with_pls_id = get_one(db_session, Library, short_name=nypl.short_name)
+        assert library_with_pls_id.pls_id.value == "12345"
+
+        # Test that the user can edit an existing PLS ID
+        with app.test_request_context("/", method="POST"):
+            flask.request.form = MultiDict([
+                ("uuid", uuid),
+                ("pls_id", "abcde")
+            ])
+            response = mock_admin_controller.add_or_edit_pls_id()
+
+        updated = get_one(db_session, Library, short_name=nypl.short_name)
+        assert updated.pls_id.value == "abcde"
+
+    def test_add_or_edit_pls_id_with_error(self, app, mock_admin_controller):
+        with app.test_request_context("/", method="POST"):
+            flask.request.form = MultiDict([
+                ("uuid", "abc"),
+                ("pls_id", "12345")
+            ])
+            response = mock_admin_controller.add_or_edit_pls_id()
+        assert response.status_code == 404
+        assert response.uri == LIBRARY_NOT_FOUND.uri
+
+    def test_search_details(
+        self, db_session, create_test_library, app, mock_admin_controller,
+        nypl, kansas_state_library, connecticut_state_library
+    ):
+        library = nypl
+        kansas = kansas_state_library
+        connecticut = connecticut_state_library
+        with_description = create_test_library(db_session, library_name="Library With Description",
+                                               has_email=True, description="For testing purposes")
+
+        # Searching for the name of a real library returns a dict whose value is a list containing
+        # that library.
+        with app.test_request_context("/", method="POST"):
+            flask.request.form = MultiDict([("name", "NYPL")])
+            response = mock_admin_controller.search_details()
+
+        for response_library in response.get("libraries"):
+            self._is_library(library, response_library)
+
+        # Searching for part of the library's name--"kansas" instead of "kansas state library" works.
+        with app.test_request_context("/", method="POST"):
+            flask.request.form = MultiDict([("name", "kansas")])
+            response = mock_admin_controller.search_details()
+
+        for response_library in response.get("libraries"):
+            self._is_library(kansas, response_library)
+
+        # Searching for a partial name may yield multiple results.
+        with app.test_request_context("/", method="POST"):
+            flask.request.form = MultiDict([("name", "state")])
+            response = mock_admin_controller.search_details()
+
+        libraries = response.get("libraries")
+        assert len(libraries) == 2
+
+        ct_then_ks = sorted(libraries, key=lambda x: x['basic_info']['short_name'])
+        self._is_library(connecticut, ct_then_ks[0])
+        self._is_library(kansas, ct_then_ks[1])
+
+        # Searching for a word or phrase found within a library's description returns
+        # a dict whose value is a list containing that library.
+        with app.test_request_context("/", method="POST"):
+            flask.request.form = MultiDict([("name", "testing")])
+            response = mock_admin_controller.search_details()
+
+        self._is_library(with_description, response.get("libraries")[0])
+
+        # Searching for a name that cannot be found returns a problem detail.
+        with app.test_request_context("/", method="POST"):
+            flask.request.form = MultiDict([("name", "other")])
+            response = mock_admin_controller.search_details()
+
+        assert response == LIBRARY_NOT_FOUND
+
+    def test_log_in(self, app, mock_admin_controller):
+        with app.test_request_context("/", method="POST"):
+            flask.request.form = MultiDict([("username", "Admin"), ("password", "123")])
+            response = mock_admin_controller.log_in()
+            assert response.status == "302 FOUND"
+            assert session["username"] == "Admin"
+
+    def test_log_in_with_error(self, db_session, app, mock_admin_controller):
+        admin = Admin.authenticate(db_session, "Admin", "123")
+        with app.test_request_context("/", method="POST"):
+            flask.request.form = MultiDict([
+                ("username", "Admin"),
+                ("password", "wrong"),
+            ])
+            response = mock_admin_controller.log_in()
+            assert(isinstance(response, ProblemDetail))
+            assert response.status_code == 401
+            assert response.title == INVALID_CREDENTIALS.title
+            assert response.uri == INVALID_CREDENTIALS.uri
+        db_session.delete(admin)
+        db_session.commit()
+
+    def test_log_in_new_admin(self, app, mock_admin_controller):
+        with app.test_request_context("/", method="POST"):
+            flask.request.form = MultiDict([
+                ("username", "New"),
+                ("password", "password")
+            ])
+            response = mock_admin_controller.log_in()
+            assert response.status == "302 FOUND"
+            assert session["username"] == "New"
+
+    def test_log_out(self, db_session, app, mock_admin_controller):
+        admin = Admin.authenticate(db_session, "Admin", "123")
+        with app.test_request_context("/"):
+            flask.request.form = MultiDict([("username", "Admin"), ("password", "123")])
+            mock_admin_controller.log_in()
+
+            assert session["username"] == "Admin"
+            response = mock_admin_controller.log_out()
+            assert session["username"] == ""
+            assert response.status == "302 FOUND"
+        db_session.delete(admin)
+        db_session.commit()
